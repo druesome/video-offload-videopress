@@ -20,7 +20,7 @@ A WordPress plugin that offloads locally-stored videos to VideoPress via Jetpack
 ### Offloading videos
 
 - **Single video**: Click **Offload to VideoPress** next to any video in the Media Library or in the VideoPress Offload admin page
-- **Bulk**: Use the **Offload All to VideoPress** button on the admin page to process videos one at a time with a progress counter
+- **Bulk**: Use the **Offload All to VideoPress** button on the admin page to process all pending videos sequentially with a progress counter
 
 ### After offloading
 
@@ -38,4 +38,4 @@ The plugin calls Jetpack's internal `/videopress/v1/upload/{id}` REST endpoint, 
 
 - Offloading requires the site to be publicly accessible (VideoPress fetches the file from the server)
 - Large files upload in chunks; the spinner stays visible for the full duration
-- Only one video can be offloaded at a time via individual buttons; the bulk action processes sequentially
+- Clicking an individual Offload button disables the others until the upload completes or errors, preventing simultaneous uploads within the same page session
