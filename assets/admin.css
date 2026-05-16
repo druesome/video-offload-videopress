@@ -1,0 +1,127 @@
+/* Video Offload for VideoPress — admin styles */
+
+/* Status badges */
+.vov-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 3px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	vertical-align: middle;
+}
+.vov-badge--local    { background: #f0f0f1; color: #50575e; }
+.vov-badge--uploading { background: #cce5ff; color: #004085; }
+.vov-badge--uploaded { background: #d4edda; color: #155724; }
+.vov-badge--error    { background: #f8d7da; color: #721c24; }
+
+/* Action buttons row */
+.vov-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-top: 6px;
+}
+
+.vov-status-cell {
+	padding: 2px 0;
+}
+
+.vov-error-msg {
+	font-size: 11px;
+	color: #721c24;
+	margin: 4px 0 2px;
+}
+
+.vov-uploading-msg {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+	color: #004085;
+	margin-top: 4px;
+}
+
+.vov-spinner {
+	display: inline-block;
+	width: 12px;
+	height: 12px;
+	border: 2px solid #cce5ff;
+	border-top-color: #004085;
+	border-radius: 50%;
+	animation: vov-spin 0.75s linear infinite;
+	flex-shrink: 0;
+}
+
+@keyframes vov-spin {
+	to { transform: rotate(360deg); }
+}
+
+/* While any offload is active, block clicks on every other offload button. */
+body.vov-offload-active .vov-btn-offload {
+	pointer-events: none;
+	opacity: 0.4;
+}
+
+.vov-local-deleted {
+	font-size: 11px;
+	color: #888;
+	font-style: italic;
+}
+
+.vov-filename {
+	color: #888;
+	word-break: break-all;
+}
+
+/* Media library column width */
+.column-vov_status {
+	width: 180px;
+}
+
+/* Admin page */
+.vov-wrap .vov-summary {
+	padding: 16px 20px;
+	margin-bottom: 20px;
+	max-width: 700px;
+}
+
+.vov-wrap .vov-summary p {
+	margin-top: 0;
+}
+
+#vov-bulk-progress {
+	margin-top: 12px;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+#vov-progress-bar {
+	width: 280px;
+	height: 18px;
+}
+
+#vov-progress-text {
+	font-size: 13px;
+	color: #50575e;
+}
+
+.vov-table td {
+	vertical-align: middle;
+}
+
+.vov-diagnostics {
+	margin-bottom: 16px;
+	font-size: 12px;
+	color: #666;
+}
+.vov-diagnostics summary {
+	cursor: pointer;
+	color: #2271b1;
+}
+.vov-diagnostics ul {
+	margin: 6px 0 0 16px;
+	font-family: monospace;
+}

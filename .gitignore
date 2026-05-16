@@ -1,0 +1,23 @@
+# Distribution
+*.zip
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# PHP / Composer
+vendor/
+composer.lock
+
+# Node
+node_modules/
+package-lock.json
+
+# WordPress
+wp-content/
