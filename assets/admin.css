@@ -91,7 +91,7 @@ body.vov-offload-active .vov-btn-offload {
 	margin-top: 0;
 }
 
-#vov-bulk-progress {
+#vov-bulk-progress:not([hidden]) {
 	margin-top: 12px;
 	display: flex;
 	align-items: center;
