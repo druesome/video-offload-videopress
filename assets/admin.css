@@ -98,6 +98,11 @@ body.vov-offload-active .vov-btn-offload {
 	gap: 10px;
 }
 
+.vov-bulk-spinner {
+	width: 16px;
+	height: 16px;
+}
+
 #vov-progress-bar {
 	width: 280px;
 	height: 18px;

@@ -298,6 +298,7 @@ class Admin {
 						</p>
 					<?php endif; ?>
 					<div id="vov-bulk-progress" hidden>
+						<span class="vov-spinner vov-bulk-spinner"></span>
 						<progress id="vov-progress-bar" value="0"></progress>
 						<span id="vov-progress-text"></span>
 					</div>

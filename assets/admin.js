@@ -226,10 +226,12 @@ jQuery( function ( $ ) {
 		if ( ids.length === 0 ) {
 			if ( $( '.vov-status-cell[data-auto-poll]' ).length > 0 ) {
 				// An upload is already in progress — let its auto-poll handle the reload.
+				$( '.vov-bulk-spinner' ).hide();
 				$progressText.text( 'Waiting for active upload to finish…' );
 				$bulkBtn.prop( 'disabled', false );
 				$( 'body' ).removeClass( 'vov-offload-active' );
 			} else {
+				$( '.vov-bulk-spinner' ).hide();
 				$progressText.text( strings.done );
 				setTimeout( () => location.reload(), 1200 );
 			}
@@ -272,6 +274,7 @@ jQuery( function ( $ ) {
 
 		function processNext() {
 			if ( ids.length === 0 ) {
+				$( '.vov-bulk-spinner' ).hide();
 				$progressText.text( strings.done );
 				setTimeout( () => location.reload(), 1200 );
 				return;
