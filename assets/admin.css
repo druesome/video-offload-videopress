@@ -1,21 +1,22 @@
 /* Video Offload for VideoPress — admin styles */
 
 /* -------------------------------------------------------------------------
-   Design tokens
+   Design tokens — sourced from jetpack.com/videopress/
+   --wp--preset--color--jetpack-green-40: #069e08  (primary brand green)
 ------------------------------------------------------------------------- */
 :root {
-	--vov-blue:         #3858E9;
-	--vov-purple:       #9333EA;
-	--vov-gradient:     linear-gradient(135deg, #3858E9 0%, #9333EA 100%);
-	--vov-blue-light:   #eff1fd;
-	--vov-purple-light: #f5f0ff;
+	--vov-green:       #069e08;
+	--vov-green-dark:  #007117;
+	--vov-green-light: #e8f5e9;
+	--vov-dark:        #101517;
 }
 
 /* -------------------------------------------------------------------------
    Page hero (admin page only)
+   Dark background matches the VideoPress marketing page aesthetic.
 ------------------------------------------------------------------------- */
 .vov-page-hero {
-	background: var(--vov-gradient);
+	background: var(--vov-dark);
 	color: #fff;
 	border-radius: 4px;
 	padding: 20px 24px;
@@ -29,7 +30,7 @@
 	flex-shrink: 0;
 	width: 44px;
 	height: 44px;
-	background: rgba(255, 255, 255, 0.15);
+	background: var(--vov-green);
 	border-radius: 50%;
 	display: flex;
 	align-items: center;
@@ -47,7 +48,7 @@
 }
 
 .vov-page-hero__subtitle {
-	color: rgba(255, 255, 255, 0.8);
+	color: rgba(255, 255, 255, 0.6);
 	font-size: 13px;
 	margin: 0;
 }
@@ -67,8 +68,8 @@
 }
 
 .vov-badge--local     { background: #f0f0f1; color: #50575e; }
-.vov-badge--uploading { background: var(--vov-blue-light); color: var(--vov-blue); }
-.vov-badge--uploaded  { background: var(--vov-purple-light); color: var(--vov-purple); }
+.vov-badge--uploading { background: #e5f0ff; color: #005a87; }
+.vov-badge--uploaded  { background: var(--vov-green-light); color: var(--vov-green-dark); }
 .vov-badge--error     { background: #fce8e8; color: #8b1a1a; }
 
 /* -------------------------------------------------------------------------
@@ -78,8 +79,8 @@
 	display: inline-block;
 	width: 12px;
 	height: 12px;
-	border: 2px solid var(--vov-blue-light);
-	border-top-color: var(--vov-blue);
+	border: 2px solid var(--vov-green-light);
+	border-top-color: var(--vov-green);
 	border-radius: 50%;
 	animation: vov-spin 0.75s linear infinite;
 	flex-shrink: 0;
@@ -119,7 +120,7 @@
 	align-items: center;
 	gap: 6px;
 	font-size: 12px;
-	color: var(--vov-blue);
+	color: #005a87;
 	margin-top: 4px;
 }
 
@@ -152,7 +153,7 @@ body.vov-offload-active .vov-btn-offload {
 	padding: 16px 20px;
 	margin-bottom: 20px;
 	max-width: 700px;
-	border-left: 4px solid var(--vov-blue);
+	border-left: 4px solid var(--vov-green);
 }
 
 .vov-wrap .vov-summary p {
@@ -161,17 +162,16 @@ body.vov-offload-active .vov-btn-offload {
 
 /* Bulk offload button */
 #vov-bulk-offload.button-primary {
-	background: var(--vov-gradient);
-	border-color: var(--vov-blue);
-	box-shadow: 0 1px 2px rgba(56, 88, 233, 0.3);
+	background: var(--vov-green);
+	border-color: var(--vov-green-dark);
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 	text-shadow: none;
 }
 
 #vov-bulk-offload.button-primary:hover,
 #vov-bulk-offload.button-primary:focus {
-	background: linear-gradient(135deg, #2d47d0 0%, #7c22c9 100%);
-	border-color: #2d47d0;
-	box-shadow: 0 1px 4px rgba(56, 88, 233, 0.4);
+	background: var(--vov-green-dark);
+	border-color: var(--vov-green-dark);
 }
 
 /* -------------------------------------------------------------------------
@@ -187,7 +187,7 @@ body.vov-offload-active .vov-btn-offload {
 #vov-progress-bar {
 	width: 280px;
 	height: 18px;
-	accent-color: var(--vov-blue);
+	accent-color: var(--vov-green);
 }
 
 #vov-progress-text {
@@ -217,7 +217,7 @@ body.vov-offload-active .vov-btn-offload {
 
 .vov-diagnostics summary {
 	cursor: pointer;
-	color: var(--vov-blue);
+	color: var(--vov-green-dark);
 }
 
 .vov-diagnostics ul {
