@@ -67,6 +67,17 @@
 	vertical-align: middle;
 }
 
+.vov-vp-icon {
+	width: 12px;
+	height: 12px;
+	fill: currentColor;
+	display: inline-block;
+	vertical-align: middle;
+	margin-right: 3px;
+	position: relative;
+	top: -1px;
+}
+
 .vov-badge--local     { background: #f0f0f1; color: #50575e; }
 .vov-badge--uploading { background: #e5f0ff; color: #005a87; }
 .vov-badge--uploaded  { background: var(--vov-green-light); color: var(--vov-green-dark); }
