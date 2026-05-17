@@ -184,7 +184,15 @@ jQuery( function ( $ ) {
 		} );
 
 		if ( ids.length === 0 ) {
-			$progressText.text( strings.done );
+			if ( $( '.vov-status-cell[data-auto-poll]' ).length > 0 ) {
+				// An upload is already in progress — let its auto-poll handle the reload.
+				$progressText.text( 'Waiting for active upload to finish…' );
+				$bulkBtn.prop( 'disabled', false );
+				$( 'body' ).removeClass( 'vov-offload-active' );
+			} else {
+				$progressText.text( strings.done );
+				setTimeout( () => location.reload(), 1200 );
+			}
 			return;
 		}
 
