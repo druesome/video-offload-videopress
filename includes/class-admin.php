@@ -232,11 +232,7 @@ class Admin {
 		?>
 		<div class="wrap vov-wrap">
 			<div class="vov-page-hero">
-				<div class="vov-page-hero__icon">
-					<svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-						<path d="M9 7l8 4-8 4V7z" fill="#fff"/>
-					</svg>
-				</div>
+				<img src="<?php echo esc_url( VOV_PLUGIN_URL . 'assets/vp-logo.png' ); ?>" alt="VideoPress" class="vov-page-hero__logo" width="40" height="40">
 				<div>
 					<h1 class="vov-page-hero__title"><?php esc_html_e( 'VideoPress Offload', 'video-offload-videopress' ); ?></h1>
 					<p class="vov-page-hero__subtitle"><?php esc_html_e( 'Offload your media library videos to VideoPress via Jetpack.', 'video-offload-videopress' ); ?></p>
