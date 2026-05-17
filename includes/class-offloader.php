@@ -15,6 +15,7 @@ class Offloader {
 	const DELETED_META        = '_vov_local_deleted';
 	const PROGRESS_META       = '_vov_progress';
 	const UPLOAD_STARTED_META = '_vov_upload_started';
+	const LAST_VERIFIED_META  = '_vov_last_verified';
 
 	const STATUS_NONE      = 'none';
 	const STATUS_UPLOADING = 'uploading';
@@ -458,6 +459,39 @@ class Offloader {
 			'bytes_uploaded' => isset( $progress['bytes_uploaded'] ) ? (int) $progress['bytes_uploaded'] : 0,
 			'file_size'      => isset( $progress['file_size'] ) ? (int) $progress['file_size'] : 0,
 		) ) );
+	}
+
+	public static function ajax_verify_guid(): void {
+		check_ajax_referer( 'vov_nonce', 'nonce' );
+
+		if ( ! current_user_can( 'upload_files' ) ) {
+			wp_send_json_error( 'Insufficient permissions.' );
+		}
+
+		$attachment_id = absint( $_POST['attachment_id'] ?? 0 );
+		if ( ! $attachment_id ) {
+			wp_send_json_error( 'Invalid attachment ID.' );
+		}
+
+		$guid = (string) get_post_meta( $attachment_id, self::GUID_META, true );
+		if ( ! $guid ) {
+			wp_send_json_error( 'No GUID found.' );
+		}
+
+		$exists = VideoPress_API::verify_guid( $guid );
+
+		if ( $exists ) {
+			update_post_meta( $attachment_id, self::LAST_VERIFIED_META, time() );
+		} else {
+			// VideoPress video was deleted — reset local status so the Offload button reappears.
+			delete_post_meta( $attachment_id, self::STATUS_META );
+			delete_post_meta( $attachment_id, self::GUID_META );
+			delete_post_meta( $attachment_id, self::MEDIA_ID_META );
+			delete_post_meta( $attachment_id, self::LAST_VERIFIED_META );
+			// Intentionally keep SOURCE_URL_META and DELETED_META as historical references.
+		}
+
+		wp_send_json_success( array( 'exists' => $exists ) );
 	}
 
 	public static function ajax_delete_local(): void {

@@ -33,6 +33,26 @@ class VideoPress_API {
 	}
 
 	/**
+	 * Check whether a VideoPress GUID still exists on WordPress.com.
+	 *
+	 * Returns false only on a definitive 404 (video was deleted).
+	 * Returns true on network errors or any non-404 response to avoid
+	 * false-positive status resets.
+	 */
+	public static function verify_guid( string $guid ): bool {
+		$response = wp_remote_get(
+			'https://public-api.wordpress.com/rest/v1.1/videos/' . rawurlencode( $guid ),
+			array( 'timeout' => 10 )
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return true; // Network error — assume the video still exists.
+		}
+
+		return (int) wp_remote_retrieve_response_code( $response ) !== 404;
+	}
+
+	/**
 	 * Find registered REST routes that mention "video" — used for diagnostics.
 	 */
 	public static function find_videopress_routes(): array {

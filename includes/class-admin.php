@@ -112,9 +112,17 @@ class Admin {
 
 		$started  = (int) get_post_meta( $attachment_id, Offloader::UPLOAD_STARTED_META, true );
 		$is_fresh = $started && $started > time() - 30 * MINUTE_IN_SECONDS;
-		$auto     = ( Offloader::STATUS_UPLOADING === $status && $is_fresh ) ? ' data-auto-poll="1"' : '';
 
-		echo '<div class="vov-status-cell" data-attachment-id="' . $id . '"' . $auto . '>';
+		$extra = '';
+		if ( Offloader::STATUS_UPLOADING === $status && $is_fresh ) {
+			$extra .= ' data-auto-poll="1"';
+		}
+		if ( Offloader::STATUS_UPLOADED === $status && $guid ) {
+			$last_verified = (int) get_post_meta( $attachment_id, Offloader::LAST_VERIFIED_META, true );
+			$extra        .= ' data-verify-guid="1" data-last-verified="' . esc_attr( $last_verified ) . '"';
+		}
+
+		echo '<div class="vov-status-cell" data-attachment-id="' . $id . '"' . $extra . '>';
 
 		switch ( $status ) {
 			case Offloader::STATUS_UPLOADING:

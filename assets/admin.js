@@ -109,6 +109,46 @@ jQuery( function ( $ ) {
 	}
 
 	// -------------------------------------------------------------------------
+	// Background GUID verification (throttled: once per 24 h per video)
+	// Fires after page load. Runs sequentially to avoid hammering the API.
+	// Reloads the page silently if any video was found to be deleted.
+	// -------------------------------------------------------------------------
+	( function () {
+		const ONE_DAY_S  = 86400;
+		const nowSeconds = Math.floor( Date.now() / 1000 );
+		const verifyIds  = [];
+
+		$( '.vov-status-cell[data-verify-guid]' ).each( function () {
+			const lastVerified = parseInt( $( this ).attr( 'data-last-verified' ) || '0', 10 );
+			if ( ( nowSeconds - lastVerified ) > ONE_DAY_S ) {
+				verifyIds.push( parseInt( $( this ).attr( 'data-attachment-id' ), 10 ) );
+			}
+		} );
+
+		if ( verifyIds.length === 0 ) { return; }
+
+		let needsReload = false;
+
+		function verifyNext() {
+			if ( verifyIds.length === 0 ) {
+				if ( needsReload ) { location.reload(); }
+				return;
+			}
+			const id = verifyIds.shift();
+			request( 'vov_verify_guid', { attachment_id: id } )
+				.done( function ( res ) {
+					if ( res.success && res.data.exists === false ) {
+						needsReload = true;
+					}
+				} )
+				.always( verifyNext );
+		}
+
+		// Wait 2 s after page load before starting, so the page is fully settled.
+		setTimeout( verifyNext, 2000 );
+	} )();
+
+	// -------------------------------------------------------------------------
 	// Single: Replace in Content
 	// -------------------------------------------------------------------------
 	$( document ).on( 'click', '.vov-btn-replace', function () {
