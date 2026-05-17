@@ -223,7 +223,7 @@ class Admin {
 		$site_private  = (int) get_option( 'blog_public' ) === -1;
 		$ready         = $is_connected && $vp_active && ! $site_private;
 		$total         = $ready ? Offloader::count_local_videos() : 0;
-		$videos        = $ready ? Offloader::get_local_videos( 0, 200 ) : array();
+		$videos        = $ready ? Offloader::get_local_videos( 0, 50 ) : array();
 		?>
 		<div class="wrap vov-wrap">
 			<h1><?php esc_html_e( 'VideoPress Offload', 'video-offload-videopress' ); ?></h1>
@@ -284,12 +284,22 @@ class Admin {
 							(int) $total
 						); ?>
 					</p>
-					<button class="button button-primary" id="vov-bulk-offload" data-total="<?php echo esc_attr( $total ); ?>">
+					<button class="button button-primary" id="vov-bulk-offload">
 						<?php esc_html_e( 'Offload All to VideoPress', 'video-offload-videopress' ); ?>
 					</button>
+					<?php if ( $total > 50 ) : ?>
+						<p class="description">
+							<?php printf(
+								/* translators: 1: batch size, 2: total count */
+								esc_html__( 'Showing the first %1$d of %2$d videos. The page will reload automatically after each batch.', 'video-offload-videopress' ),
+								min( 50, count( $videos ) ),
+								(int) $total
+							); ?>
+						</p>
+					<?php endif; ?>
 					<div id="vov-bulk-progress" hidden>
-						<progress id="vov-progress-bar" max="<?php echo esc_attr( $total ); ?>" value="0"></progress>
-						<span id="vov-progress-text">0 / <?php echo esc_html( $total ); ?></span>
+						<progress id="vov-progress-bar" value="0"></progress>
+						<span id="vov-progress-text"></span>
 					</div>
 				<?php else : ?>
 					<p><?php esc_html_e( 'All videos in your media library have been offloaded to VideoPress.', 'video-offload-videopress' ); ?></p>

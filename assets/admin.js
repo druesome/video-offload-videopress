@@ -239,6 +239,9 @@ jQuery( function ( $ ) {
 		const total = ids.length;
 		let done    = 0;
 
+		$progressBar.attr( 'max', total );
+		$progressText.text( '0 / ' + total );
+
 		function onBulkItemDone() {
 			done++;
 			$progressBar.val( done );
