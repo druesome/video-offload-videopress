@@ -68,9 +68,15 @@ class Admin {
 
 		$mime = get_post_mime_type( $post_id );
 
-		// Not a video, or already natively on VideoPress — nothing to offload.
-		if ( strpos( $mime, 'video/' ) !== 0 || 'video/videopress' === $mime ) {
+		// Non-video — nothing to show.
+		if ( strpos( $mime, 'video/' ) !== 0 ) {
 			echo '&mdash;';
+			return;
+		}
+
+		// Native Jetpack VideoPress video — already on VideoPress, show the logo.
+		if ( 'video/videopress' === $mime ) {
+			echo '<img src="' . esc_url( VOV_PLUGIN_URL . 'assets/vp-logo.png' ) . '" alt="VideoPress" class="vov-vp-logo" width="24" height="24">';
 			return;
 		}
 
@@ -143,7 +149,12 @@ class Admin {
 				break;
 
 			case Offloader::STATUS_UPLOADED:
-				echo '<img src="' . esc_url( VOV_PLUGIN_URL . 'assets/vp-logo.png' ) . '" alt="VideoPress" class="vov-vp-logo" width="24" height="24">';
+				echo '<span class="vov-badge vov-badge--uploaded">'
+					. '<svg class="vov-vp-icon" viewBox="0 0 25 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+					. '<path d="M19.2 3H5.8C4.5 3 3.5 4 3.5 5.3V18.7C3.5 20 4.5 21 5.8 21H19.2C20.5 21 21.5 20 21.5 18.7V5.3C21.5 4 20.5 3 19.2 3ZM20 18.7C20 19.1 19.6 19.5 19.2 19.5H5.8C5.4 19.5 5 19.1 5 18.7V5.3C5 4.9 5.4 4.5 5.8 4.5H19.2C19.6 4.5 20 4.9 20 5.3V18.7ZM10.5 15L15.5 12L10.5 9V15Z"/>'
+					. '</svg>'
+					. esc_html__( 'On VideoPress', 'video-offload-videopress' )
+					. '</span>';
 				echo '<div class="vov-actions">';
 
 				if ( $guid ) {
