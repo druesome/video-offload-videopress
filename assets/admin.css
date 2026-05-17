@@ -1,22 +1,102 @@
 /* Video Offload for VideoPress — admin styles */
 
-/* Status badges */
+/* -------------------------------------------------------------------------
+   Design tokens
+------------------------------------------------------------------------- */
+:root {
+	--vov-blue:         #3858E9;
+	--vov-purple:       #9333EA;
+	--vov-gradient:     linear-gradient(135deg, #3858E9 0%, #9333EA 100%);
+	--vov-blue-light:   #eff1fd;
+	--vov-purple-light: #f5f0ff;
+}
+
+/* -------------------------------------------------------------------------
+   Page hero (admin page only)
+------------------------------------------------------------------------- */
+.vov-page-hero {
+	background: var(--vov-gradient);
+	color: #fff;
+	border-radius: 4px;
+	padding: 20px 24px;
+	margin-bottom: 24px;
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+
+.vov-page-hero__icon {
+	flex-shrink: 0;
+	width: 44px;
+	height: 44px;
+	background: rgba(255, 255, 255, 0.15);
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.vov-page-hero__title {
+	color: #fff;
+	font-size: 20px;
+	font-weight: 600;
+	margin: 0 0 3px;
+	padding: 0;
+	line-height: 1.3;
+	border: none;
+}
+
+.vov-page-hero__subtitle {
+	color: rgba(255, 255, 255, 0.8);
+	font-size: 13px;
+	margin: 0;
+}
+
+/* -------------------------------------------------------------------------
+   Status badges
+------------------------------------------------------------------------- */
 .vov-badge {
 	display: inline-block;
-	padding: 2px 8px;
-	border-radius: 3px;
+	padding: 2px 9px;
+	border-radius: 10px;
 	font-size: 11px;
 	font-weight: 600;
 	letter-spacing: 0.03em;
 	text-transform: uppercase;
 	vertical-align: middle;
 }
-.vov-badge--local    { background: #f0f0f1; color: #50575e; }
-.vov-badge--uploading { background: #cce5ff; color: #004085; }
-.vov-badge--uploaded { background: #d4edda; color: #155724; }
-.vov-badge--error    { background: #f8d7da; color: #721c24; }
 
-/* Action buttons row */
+.vov-badge--local     { background: #f0f0f1; color: #50575e; }
+.vov-badge--uploading { background: var(--vov-blue-light); color: var(--vov-blue); }
+.vov-badge--uploaded  { background: var(--vov-purple-light); color: var(--vov-purple); }
+.vov-badge--error     { background: #fce8e8; color: #8b1a1a; }
+
+/* -------------------------------------------------------------------------
+   Spinner
+------------------------------------------------------------------------- */
+.vov-spinner {
+	display: inline-block;
+	width: 12px;
+	height: 12px;
+	border: 2px solid var(--vov-blue-light);
+	border-top-color: var(--vov-blue);
+	border-radius: 50%;
+	animation: vov-spin 0.75s linear infinite;
+	flex-shrink: 0;
+}
+
+.vov-bulk-spinner {
+	width: 16px;
+	height: 16px;
+}
+
+@keyframes vov-spin {
+	to { transform: rotate(360deg); }
+}
+
+/* -------------------------------------------------------------------------
+   Action buttons row
+------------------------------------------------------------------------- */
 .vov-actions {
 	display: flex;
 	flex-wrap: wrap;
@@ -30,7 +110,7 @@
 
 .vov-error-msg {
 	font-size: 11px;
-	color: #721c24;
+	color: #8b1a1a;
 	margin: 4px 0 2px;
 }
 
@@ -39,23 +119,8 @@
 	align-items: center;
 	gap: 6px;
 	font-size: 12px;
-	color: #004085;
+	color: var(--vov-blue);
 	margin-top: 4px;
-}
-
-.vov-spinner {
-	display: inline-block;
-	width: 12px;
-	height: 12px;
-	border: 2px solid #cce5ff;
-	border-top-color: #004085;
-	border-radius: 50%;
-	animation: vov-spin 0.75s linear infinite;
-	flex-shrink: 0;
-}
-
-@keyframes vov-spin {
-	to { transform: rotate(360deg); }
 }
 
 /* While any offload is active, block clicks on every other offload button. */
@@ -77,20 +142,41 @@ body.vov-offload-active .vov-btn-offload {
 
 /* Media library column width */
 .column-vov_status {
-	width: 180px;
+	width: 190px;
 }
 
-/* Admin page */
+/* -------------------------------------------------------------------------
+   Admin page — summary card
+------------------------------------------------------------------------- */
 .vov-wrap .vov-summary {
 	padding: 16px 20px;
 	margin-bottom: 20px;
 	max-width: 700px;
+	border-left: 4px solid var(--vov-blue);
 }
 
 .vov-wrap .vov-summary p {
 	margin-top: 0;
 }
 
+/* Bulk offload button */
+#vov-bulk-offload.button-primary {
+	background: var(--vov-gradient);
+	border-color: var(--vov-blue);
+	box-shadow: 0 1px 2px rgba(56, 88, 233, 0.3);
+	text-shadow: none;
+}
+
+#vov-bulk-offload.button-primary:hover,
+#vov-bulk-offload.button-primary:focus {
+	background: linear-gradient(135deg, #2d47d0 0%, #7c22c9 100%);
+	border-color: #2d47d0;
+	box-shadow: 0 1px 4px rgba(56, 88, 233, 0.4);
+}
+
+/* -------------------------------------------------------------------------
+   Admin page — progress
+------------------------------------------------------------------------- */
 #vov-bulk-progress:not([hidden]) {
 	margin-top: 12px;
 	display: flex;
@@ -98,14 +184,10 @@ body.vov-offload-active .vov-btn-offload {
 	gap: 10px;
 }
 
-.vov-bulk-spinner {
-	width: 16px;
-	height: 16px;
-}
-
 #vov-progress-bar {
 	width: 280px;
 	height: 18px;
+	accent-color: var(--vov-blue);
 }
 
 #vov-progress-text {
@@ -113,19 +195,31 @@ body.vov-offload-active .vov-btn-offload {
 	color: #50575e;
 }
 
+/* -------------------------------------------------------------------------
+   Admin page — table
+------------------------------------------------------------------------- */
 .vov-table td {
 	vertical-align: middle;
 }
 
+.vov-table tbody tr:hover td {
+	background: #fafafa;
+}
+
+/* -------------------------------------------------------------------------
+   Diagnostics
+------------------------------------------------------------------------- */
 .vov-diagnostics {
 	margin-bottom: 16px;
 	font-size: 12px;
 	color: #666;
 }
+
 .vov-diagnostics summary {
 	cursor: pointer;
-	color: #2271b1;
+	color: var(--vov-blue);
 }
+
 .vov-diagnostics ul {
 	margin: 6px 0 0 16px;
 	font-family: monospace;

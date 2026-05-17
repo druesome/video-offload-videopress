@@ -226,7 +226,17 @@ class Admin {
 		$videos        = $ready ? Offloader::get_local_videos( 0, 50 ) : array();
 		?>
 		<div class="wrap vov-wrap">
-			<h1><?php esc_html_e( 'VideoPress Offload', 'video-offload-videopress' ); ?></h1>
+			<div class="vov-page-hero">
+				<div class="vov-page-hero__icon">
+					<svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+						<path d="M9 7l8 4-8 4V7z" fill="#fff"/>
+					</svg>
+				</div>
+				<div>
+					<h1 class="vov-page-hero__title"><?php esc_html_e( 'VideoPress Offload', 'video-offload-videopress' ); ?></h1>
+					<p class="vov-page-hero__subtitle"><?php esc_html_e( 'Offload your media library videos to VideoPress via Jetpack.', 'video-offload-videopress' ); ?></p>
+				</div>
+			</div>
 
 			<?php if ( ! $is_connected ) : ?>
 				<div class="notice notice-error inline">
