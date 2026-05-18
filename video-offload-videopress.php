@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Video Offload for VideoPress
  * Description: Offloads locally-stored videos to VideoPress via Jetpack. Requires a WordPress.com Premium, Business, or Commerce plan.
- * Version: 1.2.7
+ * Version: 1.2.8
  * Requires Plugins: jetpack
  * License: GPL-2.0-or-later
  * Text Domain: video-offload-videopress
@@ -12,7 +12,7 @@ namespace VideoOffloadVideoPress;
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'VOV_VERSION', '1.2.7' );
+define( 'VOV_VERSION', '1.2.8' );
 define( 'VOV_PLUGIN_FILE', __FILE__ );
 define( 'VOV_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'VOV_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -36,7 +36,7 @@ add_action( 'plugins_loaded', function () {
 		add_action( 'admin_notices', function () {
 			echo '<div class="notice notice-warning"><p>'
 				. wp_kses(
-					__( 'Video Offload for VideoPress: the VideoPress feature is not active. It is available on <strong>Premium, Business, and Commerce</strong> WordPress.com plans. Activate it under <a href="' . esc_url( admin_url( 'admin.php?page=jetpack#/performance' ) ) . '">Jetpack → Performance</a>.', 'video-offload-videopress' ),
+					__( 'Video Offload for VideoPress: the VideoPress feature is not active. It is available on WordPress.com Premium, Business, and Commerce plans, or on self-hosted sites with a Jetpack plan that includes VideoPress. Activate it under <a href="' . esc_url( admin_url( 'admin.php?page=jetpack#/performance' ) ) . '">Jetpack → Performance</a>.', 'video-offload-videopress' ),
 					array( 'strong' => array(), 'a' => array( 'href' => array() ) )
 				)
 				. '</p></div>';

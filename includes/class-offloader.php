@@ -312,7 +312,7 @@ class Offloader {
 		}
 
 		if ( ! class_exists( '\Jetpack' ) || ! \Jetpack::is_module_active( 'videopress' ) ) {
-			wp_send_json_error( 'VideoPress is not active. A Premium, Business, or Commerce WordPress.com plan is required.' );
+			wp_send_json_error( 'VideoPress is not active. It requires a WordPress.com Premium, Business, or Commerce plan, or a Jetpack plan that includes VideoPress.' );
 		}
 
 		if ( ! VideoPress_API::is_connected() ) {
