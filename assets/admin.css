@@ -12,40 +12,19 @@
 }
 
 /* -------------------------------------------------------------------------
-   Page hero (admin page only)
-   Dark background matches the VideoPress marketing page aesthetic.
+   Page title (admin page only)
 ------------------------------------------------------------------------- */
-.vov-page-hero {
-	background: var(--vov-dark);
-	color: #fff;
-	border-radius: 4px;
-	padding: 20px 24px;
-	margin-bottom: 24px;
+.vov-page-title {
 	display: flex;
 	align-items: center;
-	gap: 16px;
+	gap: 10px;
 }
 
-.vov-page-hero__logo {
+.vov-page-title__logo {
+	width: 28px;
+	height: 28px;
+	filter: brightness(0);
 	flex-shrink: 0;
-	width: 40px;
-	height: 40px;
-}
-
-.vov-page-hero__title {
-	color: #fff;
-	font-size: 20px;
-	font-weight: 600;
-	margin: 0 0 3px;
-	padding: 0;
-	line-height: 1.3;
-	border: none;
-}
-
-.vov-page-hero__subtitle {
-	color: rgba(255, 255, 255, 0.6);
-	font-size: 13px;
-	margin: 0;
 }
 
 /* -------------------------------------------------------------------------
