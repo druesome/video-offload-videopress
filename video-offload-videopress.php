@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Video Offload for VideoPress
- * Description: Offloads locally-stored videos to VideoPress via Jetpack. Requires a WordPress.com Premium, Business, or Commerce plan.
- * Version: 1.2.9
+ * Description: Offloads locally-stored videos to VideoPress via Jetpack. Requires a Jetpack plan that includes VideoPress.
+ * Version: 1.3.0
  * Requires Plugins: jetpack
  * License: GPL-2.0-or-later
  * Text Domain: video-offload-videopress
@@ -12,7 +12,7 @@ namespace VideoOffloadVideoPress;
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'VOV_VERSION', '1.2.9' );
+define( 'VOV_VERSION', '1.3.0' );
 define( 'VOV_PLUGIN_FILE', __FILE__ );
 define( 'VOV_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'VOV_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
