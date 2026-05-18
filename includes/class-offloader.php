@@ -510,4 +510,42 @@ class Offloader {
 
 		wp_send_json_success( array( 'deleted' => true ) );
 	}
+
+	/**
+	 * When a video/videopress attachment is permanently deleted, reset the paired
+	 * local attachment so it can be offloaded again.
+	 */
+	public static function on_vp_attachment_deleted( int $attachment_id ): void {
+		if ( 'video/videopress' !== get_post_mime_type( $attachment_id ) ) {
+			return;
+		}
+
+		$local_posts = get_posts( array(
+			'post_type'      => 'attachment',
+			'post_status'    => 'inherit',
+			'posts_per_page' => 1,
+			'fields'         => 'ids',
+			'meta_query'     => array( array(
+				'key'   => self::MEDIA_ID_META,
+				'value' => $attachment_id,
+				'type'  => 'NUMERIC',
+			) ),
+		) );
+
+		if ( ! $local_posts ) {
+			return;
+		}
+
+		$local_id = $local_posts[0];
+
+		delete_post_meta( $local_id, self::STATUS_META );
+		delete_post_meta( $local_id, self::GUID_META );
+		delete_post_meta( $local_id, self::MEDIA_ID_META );
+		delete_post_meta( $local_id, self::LAST_VERIFIED_META );
+		delete_post_meta( $local_id, self::ERROR_META );
+		delete_post_meta( $local_id, self::UPLOAD_STARTED_META );
+		delete_post_meta( $local_id, self::UPLOAD_KEY_META );
+		delete_post_meta( $local_id, self::PROGRESS_META );
+		delete_post_meta( $local_id, self::SOURCE_URL_META );
+	}
 }

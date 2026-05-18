@@ -19,6 +19,9 @@ class Admin {
 
 		// Pair-view filter: ?vov_pair=vp_id,local_id shows just those two rows.
 		add_filter( 'pre_get_posts', array( self::class, 'apply_pair_filter' ) );
+
+		// Reset local video status when its VideoPress attachment is permanently deleted.
+		add_action( 'delete_attachment', array( Offloader::class, 'on_vp_attachment_deleted' ) );
 	}
 
 	public static function add_menu(): void {
