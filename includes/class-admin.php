@@ -17,9 +17,8 @@ class Admin {
 		// Attachment edit screen (post.php — not the grid modal).
 		add_filter( 'attachment_fields_to_edit', array( self::class, 'add_attachment_fields' ), 10, 2 );
 
-		// Media library filter dropdown.
-		add_action( 'restrict_manage_posts', array( self::class, 'add_media_filter' ) );
-		add_filter( 'pre_get_posts', array( self::class, 'apply_media_filter' ) );
+		// Pair-view filter: ?vov_pair=vp_id,local_id shows just those two rows.
+		add_filter( 'pre_get_posts', array( self::class, 'apply_pair_filter' ) );
 	}
 
 	public static function add_menu(): void {
@@ -81,6 +80,25 @@ class Admin {
 		// Native Jetpack VideoPress video — already on VideoPress, show the logo.
 		if ( 'video/videopress' === $mime ) {
 			echo '<img src="' . esc_url( VOV_PLUGIN_URL . 'assets/vp-logo.png' ) . '" alt="VideoPress" class="vov-vp-logo" width="24" height="24">';
+
+			// Find the local counterpart (stored as _vov_media_id on the local attachment).
+			$local_ids = get_posts( array(
+				'post_type'      => 'attachment',
+				'post_status'    => 'inherit',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'meta_query'     => array( array(
+					'key'   => Offloader::MEDIA_ID_META,
+					'value' => $post_id,
+					'type'  => 'NUMERIC',
+				) ),
+			) );
+
+			if ( $local_ids ) {
+				$url = admin_url( 'upload.php?post_type=attachment&vov_pair=' . $post_id . ',' . $local_ids[0] );
+				echo '<a href="' . esc_url( $url ) . '" class="vov-pair-link">' . esc_html__( 'Show local video', 'video-offload-videopress' ) . '</a>';
+			}
+
 			return;
 		}
 
@@ -111,56 +129,25 @@ class Admin {
 	}
 
 	// -------------------------------------------------------------------------
-	// Media library filter
+	// Pair-view filter: shows the VideoPress attachment and its local counterpart
 	// -------------------------------------------------------------------------
 
-	public static function add_media_filter( string $post_type ): void {
-		if ( 'attachment' !== $post_type ) {
-			return;
-		}
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$selected = isset( $_GET['vov_filter'] ) ? sanitize_key( $_GET['vov_filter'] ) : '';
-		?>
-		<select name="vov_filter" id="vov-filter">
-			<option value=""><?php esc_html_e( 'All VideoPress statuses', 'video-offload-videopress' ); ?></option>
-			<option value="offloaded" <?php selected( $selected, 'offloaded' ); ?>><?php esc_html_e( 'On VideoPress', 'video-offload-videopress' ); ?></option>
-			<option value="local" <?php selected( $selected, 'local' ); ?>><?php esc_html_e( 'Not yet offloaded', 'video-offload-videopress' ); ?></option>
-		</select>
-		<?php
-	}
-
-	public static function apply_media_filter( \WP_Query $query ): void {
+	public static function apply_pair_filter( \WP_Query $query ): void {
 		if ( ! is_admin() || ! $query->is_main_query() ) {
 			return;
 		}
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$filter = isset( $_GET['vov_filter'] ) ? sanitize_key( $_GET['vov_filter'] ) : '';
-		if ( ! $filter ) {
+		$pair = isset( $_GET['vov_pair'] ) ? sanitize_text_field( wp_unslash( $_GET['vov_pair'] ) ) : '';
+		if ( ! $pair ) {
 			return;
 		}
-		if ( 'offloaded' === $filter ) {
-			$new_clause = array(
-				'key'   => Offloader::STATUS_META,
-				'value' => Offloader::STATUS_UPLOADED,
-			);
-		} elseif ( 'local' === $filter ) {
-			$new_clause = array(
-				'relation' => 'OR',
-				array(
-					'key'     => Offloader::STATUS_META,
-					'compare' => 'NOT EXISTS',
-				),
-				array(
-					'key'     => Offloader::STATUS_META,
-					'value'   => Offloader::STATUS_UPLOADED,
-					'compare' => '!=',
-				),
-			);
-		} else {
+		$ids = array_values( array_filter( array_map( 'absint', explode( ',', $pair ) ) ) );
+		if ( count( $ids ) !== 2 ) {
 			return;
 		}
-		$existing = $query->get( 'meta_query' ) ?: array();
-		$query->set( 'meta_query', array_merge( $existing, array( $new_clause ) ) );
+		$query->set( 'post__in', $ids );
+		$query->set( 'orderby', 'post__in' );
+		$query->set( 'posts_per_page', -1 );
 	}
 
 	// -------------------------------------------------------------------------

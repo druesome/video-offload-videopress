@@ -122,6 +122,19 @@ body.vov-offload-active .vov-btn-offload {
 	opacity: 0.4;
 }
 
+.vov-pair-link {
+	display: block;
+	margin-top: 4px;
+	font-size: 11px;
+	color: #2271b1;
+	text-decoration: none;
+}
+
+.vov-pair-link:hover {
+	color: #135e96;
+	text-decoration: underline;
+}
+
 .vov-local-deleted {
 	font-size: 11px;
 	color: #888;
