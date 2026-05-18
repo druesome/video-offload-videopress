@@ -94,7 +94,7 @@ class Admin {
 				) ),
 			) );
 
-			if ( $local_ids ) {
+			if ( $local_ids && ! get_post_meta( $local_ids[0], Offloader::DELETED_META, true ) ) {
 				$url = admin_url( 'upload.php?post_type=attachment&vov_pair=' . $post_id . ',' . $local_ids[0] );
 				echo '<a href="' . esc_url( $url ) . '" class="vov-pair-link">' . esc_html__( 'Show local video', 'video-offload-videopress' ) . '</a>';
 			}
@@ -144,6 +144,13 @@ class Admin {
 		$ids = array_values( array_filter( array_map( 'absint', explode( ',', $pair ) ) ) );
 		if ( count( $ids ) !== 2 ) {
 			return;
+		}
+		// Verify both IDs are valid attachments before narrowing the query.
+		foreach ( $ids as $id ) {
+			$post = get_post( $id );
+			if ( ! $post || 'attachment' !== $post->post_type ) {
+				return;
+			}
 		}
 		$query->set( 'post__in', $ids );
 		$query->set( 'orderby', 'post__in' );
