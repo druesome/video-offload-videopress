@@ -16,6 +16,10 @@ class Admin {
 
 		// Attachment edit screen (post.php — not the grid modal).
 		add_filter( 'attachment_fields_to_edit', array( self::class, 'add_attachment_fields' ), 10, 2 );
+
+		// Media library filter dropdown.
+		add_action( 'restrict_manage_posts', array( self::class, 'add_media_filter' ) );
+		add_filter( 'pre_get_posts', array( self::class, 'apply_media_filter' ) );
 	}
 
 	public static function add_menu(): void {
@@ -104,6 +108,59 @@ class Admin {
 		);
 
 		return $fields;
+	}
+
+	// -------------------------------------------------------------------------
+	// Media library filter
+	// -------------------------------------------------------------------------
+
+	public static function add_media_filter( string $post_type ): void {
+		if ( 'attachment' !== $post_type ) {
+			return;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$selected = isset( $_GET['vov_filter'] ) ? sanitize_key( $_GET['vov_filter'] ) : '';
+		?>
+		<select name="vov_filter" id="vov-filter">
+			<option value=""><?php esc_html_e( 'All VideoPress statuses', 'video-offload-videopress' ); ?></option>
+			<option value="offloaded" <?php selected( $selected, 'offloaded' ); ?>><?php esc_html_e( 'On VideoPress', 'video-offload-videopress' ); ?></option>
+			<option value="local" <?php selected( $selected, 'local' ); ?>><?php esc_html_e( 'Not yet offloaded', 'video-offload-videopress' ); ?></option>
+		</select>
+		<?php
+	}
+
+	public static function apply_media_filter( \WP_Query $query ): void {
+		if ( ! is_admin() || ! $query->is_main_query() ) {
+			return;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$filter = isset( $_GET['vov_filter'] ) ? sanitize_key( $_GET['vov_filter'] ) : '';
+		if ( ! $filter ) {
+			return;
+		}
+		if ( 'offloaded' === $filter ) {
+			$new_clause = array(
+				'key'   => Offloader::STATUS_META,
+				'value' => Offloader::STATUS_UPLOADED,
+			);
+		} elseif ( 'local' === $filter ) {
+			$new_clause = array(
+				'relation' => 'OR',
+				array(
+					'key'     => Offloader::STATUS_META,
+					'compare' => 'NOT EXISTS',
+				),
+				array(
+					'key'     => Offloader::STATUS_META,
+					'value'   => Offloader::STATUS_UPLOADED,
+					'compare' => '!=',
+				),
+			);
+		} else {
+			return;
+		}
+		$existing = $query->get( 'meta_query' ) ?: array();
+		$query->set( 'meta_query', array_merge( $existing, array( $new_clause ) ) );
 	}
 
 	// -------------------------------------------------------------------------
