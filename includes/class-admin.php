@@ -259,6 +259,19 @@ class Admin {
 				break;
 		}
 
+		// File size — try attachment metadata first (WP 6.0+), fall back to disk.
+		$meta  = wp_get_attachment_metadata( $attachment_id );
+		$bytes = isset( $meta['filesize'] ) ? (int) $meta['filesize'] : 0;
+		if ( ! $bytes ) {
+			$path = get_attached_file( $attachment_id );
+			if ( $path && file_exists( $path ) ) {
+				$bytes = (int) filesize( $path );
+			}
+		}
+		if ( $bytes > 0 ) {
+			echo '<span class="vov-filesize">' . esc_html( size_format( $bytes, 1 ) ) . '</span>';
+		}
+
 		echo '</div>';
 	}
 

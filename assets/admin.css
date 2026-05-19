@@ -122,6 +122,13 @@ body.vov-offload-active .vov-btn-offload {
 	opacity: 0.4;
 }
 
+.vov-filesize {
+	display: block;
+	margin-top: 4px;
+	font-size: 11px;
+	color: #888;
+}
+
 .vov-pair-link {
 	display: block;
 	margin-top: 4px;
