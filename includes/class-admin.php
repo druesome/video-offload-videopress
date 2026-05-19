@@ -198,7 +198,7 @@ class Admin {
 					// Timestamp is old or missing — the previous attempt died.
 					echo '<span class="vov-badge vov-badge--uploading">' . esc_html__( 'Stuck', 'video-offload-videopress' ) . '</span>';
 					printf(
-						'<button class="button button-small vov-btn-offload" data-id="%s">%s</button>',
+						'<button type="button" class="button button-small vov-btn-offload" data-id="%s">%s</button>',
 						$id,
 						esc_html__( 'Retry', 'video-offload-videopress' )
 					);
@@ -221,7 +221,7 @@ class Admin {
 						esc_html__( 'View on VideoPress', 'video-offload-videopress' )
 					);
 					printf(
-						'<button class="button button-small vov-btn-replace" data-id="%s">%s</button>',
+						'<button type="button" class="button button-small vov-btn-replace" data-id="%s">%s</button>',
 						$id,
 						esc_html__( 'Replace in Content', 'video-offload-videopress' )
 					);
@@ -229,7 +229,7 @@ class Admin {
 
 				if ( ! $deleted ) {
 					printf(
-						'<button class="button button-small button-link-delete vov-btn-delete" data-id="%s">%s</button>',
+						'<button type="button" class="button button-small button-link-delete vov-btn-delete" data-id="%s">%s</button>',
 						$id,
 						esc_html__( 'Delete Local File', 'video-offload-videopress' )
 					);
@@ -246,7 +246,7 @@ class Admin {
 					echo '<p class="vov-error-msg">' . esc_html( $s['error'] ) . '</p>';
 				}
 				printf(
-					'<button class="button button-small vov-btn-offload" data-id="%s">%s</button>',
+					'<button type="button" class="button button-small vov-btn-offload" data-id="%s">%s</button>',
 					$id,
 					esc_html__( 'Retry', 'video-offload-videopress' )
 				);
@@ -255,7 +255,7 @@ class Admin {
 			default: // none / empty
 				echo '<span class="vov-badge vov-badge--local">' . esc_html__( 'Local only', 'video-offload-videopress' ) . '</span>';
 				printf(
-					'<button class="button button-small vov-btn-offload" data-id="%s">%s</button>',
+					'<button type="button" class="button button-small vov-btn-offload" data-id="%s">%s</button>',
 					$id,
 					esc_html__( 'Offload to VideoPress', 'video-offload-videopress' )
 				);
@@ -276,7 +276,7 @@ class Admin {
 		}
 
 		printf(
-			'<button class="button-link vov-btn-find-used" data-id="%s">%s</button><ul class="vov-used-in-list" hidden></ul>',
+			'<button type="button" class="button-link vov-btn-find-used" data-id="%s">%s</button><ul class="vov-used-in-list" hidden></ul>',
 			$id,
 			esc_html__( 'Where is this used?', 'video-offload-videopress' )
 		);
@@ -422,7 +422,7 @@ class Admin {
 						<td><?php echo esc_html( $mime ); ?></td>
 						<td><?php echo esc_html( $file_size ); ?></td>
 						<td>
-							<button class="button-link vov-btn-find-used" data-id="<?php echo esc_attr( $video->ID ); ?>">
+							<button type="button" class="button-link vov-btn-find-used" data-id="<?php echo esc_attr( $video->ID ); ?>">
 								<?php esc_html_e( 'Where is this used?', 'video-offload-videopress' ); ?>
 							</button>
 							<ul class="vov-used-in-list" hidden></ul>
