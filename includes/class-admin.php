@@ -54,6 +54,9 @@ class Admin {
 				'confirmDelete' => __( 'Are you sure you want to delete the local file? Before proceeding, please confirm that the video is already offloaded to VideoPress. This action cannot be undone.', 'video-offload-videopress' ),
 				'error'         => __( 'Error: ', 'video-offload-videopress' ),
 				'done'          => __( 'Done! Reloading…', 'video-offload-videopress' ),
+				'whereUsed'     => __( 'Where is this used?', 'video-offload-videopress' ),
+				'hideUsedIn'    => __( 'Hide', 'video-offload-videopress' ),
+				'notUsed'       => __( 'Not found in any content.', 'video-offload-videopress' ),
 			),
 		) );
 	}
@@ -272,6 +275,12 @@ class Admin {
 			echo '<span class="vov-filesize">' . esc_html( size_format( $bytes, 1 ) ) . '</span>';
 		}
 
+		printf(
+			'<button class="button-link vov-btn-find-used" data-id="%s">%s</button><ul class="vov-used-in-list" hidden></ul>',
+			$id,
+			esc_html__( 'Where is this used?', 'video-offload-videopress' )
+		);
+
 		echo '</div>';
 	}
 
@@ -395,6 +404,7 @@ class Admin {
 						<th class="column-title column-primary"><?php esc_html_e( 'Video', 'video-offload-videopress' ); ?></th>
 						<th><?php esc_html_e( 'Type', 'video-offload-videopress' ); ?></th>
 						<th><?php esc_html_e( 'File Size', 'video-offload-videopress' ); ?></th>
+						<th><?php esc_html_e( 'Used in', 'video-offload-videopress' ); ?></th>
 						<th><?php esc_html_e( 'Status', 'video-offload-videopress' ); ?></th>
 					</tr>
 				</thead>
@@ -411,6 +421,12 @@ class Admin {
 						</td>
 						<td><?php echo esc_html( $mime ); ?></td>
 						<td><?php echo esc_html( $file_size ); ?></td>
+						<td>
+							<button class="button-link vov-btn-find-used" data-id="<?php echo esc_attr( $video->ID ); ?>">
+								<?php esc_html_e( 'Where is this used?', 'video-offload-videopress' ); ?>
+							</button>
+							<ul class="vov-used-in-list" hidden></ul>
+						</td>
 						<td><?php self::render_status_cell( $video->ID, Offloader::get_status( $video->ID ) ); ?></td>
 					</tr>
 					<?php endforeach; ?>

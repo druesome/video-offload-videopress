@@ -122,6 +122,55 @@ body.vov-offload-active .vov-btn-offload {
 	opacity: 0.4;
 }
 
+/* -------------------------------------------------------------------------
+   Where is this used?
+------------------------------------------------------------------------- */
+.vov-btn-find-used {
+	display: block;
+	margin-top: 6px;
+	font-size: 11px;
+	color: #2271b1;
+	background: none;
+	border: none;
+	padding: 0;
+	cursor: pointer;
+	text-decoration: none;
+}
+
+.vov-btn-find-used:hover {
+	color: #135e96;
+	text-decoration: underline;
+}
+
+.vov-used-in-list {
+	margin: 4px 0 0 0;
+	padding: 0;
+	list-style: none;
+	font-size: 11px;
+}
+
+.vov-used-in-list li {
+	padding: 1px 0;
+}
+
+.vov-used-in-list a {
+	color: #2271b1;
+	text-decoration: none;
+}
+
+.vov-used-in-list a:hover {
+	text-decoration: underline;
+}
+
+.vov-used-in-type {
+	color: #888;
+}
+
+.vov-used-in-empty {
+	color: #888;
+	font-style: italic;
+}
+
 .vov-filesize {
 	display: block;
 	margin-top: 4px;

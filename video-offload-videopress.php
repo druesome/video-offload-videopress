@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Video Offload for VideoPress
  * Description: Offloads locally-stored videos to VideoPress via Jetpack. Requires a Jetpack plan that includes VideoPress.
- * Version: 1.3.5
+ * Version: 1.3.6
  * Requires Plugins: jetpack
  * License: GPL-2.0-or-later
  * Text Domain: video-offload-videopress
@@ -12,7 +12,7 @@ namespace VideoOffloadVideoPress;
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'VOV_VERSION', '1.3.5' );
+define( 'VOV_VERSION', '1.3.6' );
 define( 'VOV_PLUGIN_FILE', __FILE__ );
 define( 'VOV_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'VOV_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -48,6 +48,7 @@ add_action( 'plugins_loaded', function () {
 
 add_action( 'wp_ajax_vov_offload_video',   array( Offloader::class,        'ajax_offload' ) );
 add_action( 'wp_ajax_vov_get_status',      array( Offloader::class,        'ajax_get_status' ) );
-add_action( 'wp_ajax_vov_replace_content', array( Content_Replacer::class, 'ajax_replace' ) );
+add_action( 'wp_ajax_vov_replace_content',   array( Content_Replacer::class, 'ajax_replace' ) );
+add_action( 'wp_ajax_vov_find_in_content',  array( Content_Replacer::class, 'ajax_find_in_content' ) );
 add_action( 'wp_ajax_vov_delete_local',    array( Offloader::class,        'ajax_delete_local' ) );
 add_action( 'wp_ajax_vov_verify_guid',    array( Offloader::class,        'ajax_verify_guid' ) );

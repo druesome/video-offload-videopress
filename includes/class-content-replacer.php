@@ -197,8 +197,34 @@ class Content_Replacer {
 	}
 
 	// -------------------------------------------------------------------------
-	// AJAX handler
+	// AJAX handlers
 	// -------------------------------------------------------------------------
+
+	public static function ajax_find_in_content(): void {
+		check_ajax_referer( 'vov_nonce', 'nonce' );
+
+		if ( ! current_user_can( 'edit_posts' ) ) {
+			wp_send_json_error( 'Insufficient permissions.' );
+		}
+
+		$attachment_id = absint( $_POST['attachment_id'] ?? 0 );
+		if ( ! $attachment_id ) {
+			wp_send_json_error( 'Invalid attachment ID.' );
+		}
+
+		$results = self::find_referencing_posts( $attachment_id );
+
+		$posts = array_map( function ( $post ) {
+			return array(
+				'id'       => (int) $post->ID,
+				'title'    => $post->post_title ?: __( '(no title)', 'video-offload-videopress' ),
+				'type'     => $post->post_type,
+				'edit_url' => get_edit_post_link( $post->ID, 'raw' ),
+			);
+		}, $results );
+
+		wp_send_json_success( array( 'posts' => $posts ) );
+	}
 
 	public static function ajax_replace(): void {
 		check_ajax_referer( 'vov_nonce', 'nonce' );

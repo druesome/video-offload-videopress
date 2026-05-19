@@ -285,4 +285,50 @@ jQuery( function ( $ ) {
 
 		processNext();
 	} );
+
+	// -------------------------------------------------------------------------
+	// Where is this used?
+	// -------------------------------------------------------------------------
+	$( document ).on( 'click', '.vov-btn-find-used', function () {
+		const $btn  = $( this );
+		const $list = $btn.siblings( '.vov-used-in-list' );
+		const id    = $btn.data( 'id' );
+
+		// Toggle visibility if already loaded.
+		if ( $btn.data( 'vov-loaded' ) ) {
+			const hidden = $list.is( '[hidden]' );
+			if ( hidden ) {
+				$list.removeAttr( 'hidden' );
+				$btn.text( strings.hideUsedIn );
+			} else {
+				$list.attr( 'hidden', '' );
+				$btn.text( strings.whereUsed );
+			}
+			return;
+		}
+
+		$btn.text( '…' ).prop( 'disabled', true );
+
+		request( 'vov_find_in_content', { attachment_id: id } )
+			.done( function ( res ) {
+				if ( ! res.success ) { $btn.text( strings.whereUsed ).prop( 'disabled', false ); return; }
+
+				const posts = res.data.posts;
+				const $items = posts.length
+					? posts.map( function ( p ) {
+						const $li = $( '<li>' );
+						$( '<a>' ).attr( 'href', p.edit_url ).text( p.title ).appendTo( $li );
+						if ( p.type !== 'post' ) {
+							$li.append( document.createTextNode( ' ' ) );
+							$( '<span>' ).addClass( 'vov-used-in-type' ).text( '(' + p.type + ')' ).appendTo( $li );
+						}
+						return $li[0];
+					} )
+					: [ $( '<li>' ).addClass( 'vov-used-in-empty' ).text( strings.notUsed )[0] ];
+
+				$list.empty().append( $items ).removeAttr( 'hidden' );
+				$btn.data( 'vov-loaded', true ).prop( 'disabled', false ).text( strings.hideUsedIn );
+			} )
+			.fail( function () { $btn.text( strings.whereUsed ).prop( 'disabled', false ); } );
+	} );
 } );
