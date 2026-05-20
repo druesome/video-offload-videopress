@@ -29,162 +29,108 @@ jQuery( function ( $ ) {
 		const $loading = $( '<span class="vov-uploading-msg"><span class="vov-spinner"></span>Offloading, please wait…</span>' );
 		$btn.after( $loading );
 
-		// Wait for two animation frames so the browser paints the spinner before
-		// the AJAX fires. Without this a fast error response triggers the alert
-		// before the spinner has ever appeared on screen.
-		requestAnimationFrame( function () { requestAnimationFrame( startRequest ); } );
-
-		function startRequest() { request( 'vov_offload_video', { attachment_id: id } )
-			.done( function ( res ) {
-				if ( res.success ) {
-					location.reload();
-				} else {
-					showError( res.data );
-				}
-			} )
-			.fail( function () {
-				// HTTP connection was cut (Atomic proxy timeout). PHP is still running
-				// the upload with ignore_user_abort(true). Poll for the final status.
-				pollStatus( 0 );
-			} );
-
-		function pollStatus( polls ) {
+		function poll( uploadKey, polls ) {
 			if ( polls >= 40 ) {
-				showError( 'Connection timed out. If this was a large file, try refreshing the page in a moment — the video may still finish uploading.' );
+				$loading.remove();
+				$btn.show();
+				$cell.find( '.vov-badge' ).attr( 'class', 'vov-badge vov-badge--error' ).text( 'Timeout' );
+				$( 'body' ).removeClass( 'vov-offload-active' );
+				offloadActive = false;
 				return;
 			}
 			setTimeout( function () {
 				request( 'vov_get_status', { attachment_id: id } )
 					.done( function ( res ) {
-						if ( ! res.success ) { pollStatus( polls + 1 ); return; }
-						const data = res.data;
-						if ( data.status === 'uploaded' ) {
+						if ( res.success && ( res.data.status === 'uploaded' || res.data.status === 'error' ) ) {
 							location.reload();
-						} else if ( data.status === 'error' ) {
-							showError( data.error || 'Upload failed.' );
 						} else {
-							pollStatus( polls + 1 );
+							poll( uploadKey, polls + 1 );
 						}
 					} )
-					.fail( function () { pollStatus( polls + 1 ); } );
+					.fail( function () { poll( uploadKey, polls + 1 ); } );
 			}, 3000 );
 		}
 
-		} // end startRequest
-
-		function showError( msg ) {
-			offloadActive = false;
-			$( 'body' ).removeClass( 'vov-offload-active' );
-			$cell.find( '.vov-badge' ).attr( 'class', 'vov-badge vov-badge--error' ).text( 'Error' );
-			$btn.text( 'Retry' ).show();
-			$loading.remove();
-			alert( strings.error + msg );
-		}
+		request( 'vov_offload_video', { attachment_id: id } )
+			.done( function ( res ) {
+				if ( res.success ) {
+					if ( res.data && res.data.status === 'uploading' ) {
+						poll( res.data.upload_key || '', 0 );
+					} else {
+						location.reload();
+					}
+				} else {
+					$loading.remove();
+					$btn.show();
+					$cell.find( '.vov-badge' ).attr( 'class', 'vov-badge vov-badge--error' ).text( 'Error' );
+					$( '<p class="vov-error-msg">' ).text( strings.error + ( res.data || '' ) ).insertAfter( $btn );
+					$( 'body' ).removeClass( 'vov-offload-active' );
+					offloadActive = false;
+				}
+			} )
+			.fail( function () {
+				$loading.remove();
+				$btn.show();
+				$( 'body' ).removeClass( 'vov-offload-active' );
+				offloadActive = false;
+			} );
 	} );
 
 	// -------------------------------------------------------------------------
-	// Auto-poll: resume tracking uploads that were running when the page loaded
-	// (e.g. user refreshed the tab mid-upload). PHP marks these cells with
-	// data-auto-poll="1" when the upload started less than 30 minutes ago.
+	// Auto-poll uploading cells on page load
 	// -------------------------------------------------------------------------
 	$( '.vov-status-cell[data-auto-poll]' ).each( function () {
-		const id = parseInt( $( this ).attr( 'data-attachment-id' ), 10 );
-		autoPoll( id, 0 );
+		const $cell = $( this );
+		const id    = $cell.data( 'attachment-id' );
+
+		function autoPoll( polls ) {
+			if ( polls >= 40 ) { return; }
+			setTimeout( function () {
+				request( 'vov_get_status', { attachment_id: id } )
+					.done( function ( res ) {
+						if ( res.success && ( res.data.status === 'uploaded' || res.data.status === 'error' ) ) {
+							location.reload();
+						} else {
+							autoPoll( polls + 1 );
+						}
+					} )
+					.fail( function () { autoPoll( polls + 1 ); } );
+			}, 3000 );
+		}
+		autoPoll( 0 );
 	} );
 
-	function autoPoll( id, polls ) {
-		if ( polls >= 40 ) { return; } // Give up after ~2 min; user can refresh manually.
-		setTimeout( function () {
-			request( 'vov_get_status', { attachment_id: id } )
-				.done( function ( res ) {
-					if ( ! res.success ) { autoPoll( id, polls + 1 ); return; }
-					if ( res.data.status === 'uploaded' || res.data.status === 'error' ) {
-						location.reload();
-					} else {
-						autoPoll( id, polls + 1 );
-					}
-				} )
-				.fail( function () { autoPoll( id, polls + 1 ); } );
-		}, 3000 );
-	}
-
 	// -------------------------------------------------------------------------
-	// Background GUID verification (throttled: once per 24 h per video)
-	// Fires after page load. Runs sequentially to avoid hammering the API.
-	// Reloads the page silently if any video was found to be deleted.
-	// -------------------------------------------------------------------------
-	( function () {
-		const ONE_DAY_S  = 86400;
-		const nowSeconds = Math.floor( Date.now() / 1000 );
-		const verifyIds  = [];
-
-		$( '.vov-status-cell[data-verify-guid]' ).each( function () {
-			const lastVerified = parseInt( $( this ).attr( 'data-last-verified' ) || '0', 10 );
-			if ( ( nowSeconds - lastVerified ) > ONE_DAY_S ) {
-				verifyIds.push( parseInt( $( this ).attr( 'data-attachment-id' ), 10 ) );
-			}
-		} );
-
-		if ( verifyIds.length === 0 ) { return; }
-
-		let needsReload = false;
-
-		function verifyNext() {
-			if ( verifyIds.length === 0 ) {
-				if ( needsReload ) { location.reload(); }
-				return;
-			}
-			const id = verifyIds.shift();
-			request( 'vov_verify_guid', { attachment_id: id } )
-				.done( function ( res ) {
-					if ( res.success && res.data.exists === false ) {
-						needsReload = true;
-					}
-				} )
-				.always( verifyNext );
-		}
-
-		// Wait 2 s after page load before starting, so the page is fully settled.
-		setTimeout( verifyNext, 2000 );
-	} )();
-
-	// -------------------------------------------------------------------------
-	// Single: Replace in Content
+	// Replace in Content
 	// -------------------------------------------------------------------------
 	$( document ).on( 'click', '.vov-btn-replace', function () {
-		const $btn = $( this );
-		const id   = $btn.data( 'id' );
+		const $btn  = $( this );
+		const id    = $btn.data( 'id' );
+		const $cell = $btn.closest( '.vov-status-cell' );
 
 		$btn.prop( 'disabled', true ).text( strings.replacing );
 
 		request( 'vov_replace_content', { attachment_id: id } )
 			.done( function ( res ) {
 				if ( res.success ) {
-					const count = res.data.count;
-					if ( count > 0 ) {
-						alert( count + ' post(s) updated.' );
-					} else {
-						alert( 'No posts found referencing this video.' );
-					}
+					location.reload();
 				} else {
-					alert( strings.error + res.data );
+					$btn.prop( 'disabled', false ).text( 'Replace in Content' );
+					$( '<p class="vov-error-msg">' ).text( strings.error + ( res.data || '' ) ).insertAfter( $btn );
 				}
 			} )
-			.always( function () {
-				$btn.prop( 'disabled', false ).text( 'Replace in Content' );
-			} );
+			.fail( function () { $btn.prop( 'disabled', false ).text( 'Replace in Content' ); } );
 	} );
 
 	// -------------------------------------------------------------------------
-	// Single: Delete Local File
+	// Delete Local File
 	// -------------------------------------------------------------------------
 	$( document ).on( 'click', '.vov-btn-delete', function () {
+		if ( ! window.confirm( strings.confirmDelete ) ) { return; }
+
 		const $btn  = $( this );
 		const id    = $btn.data( 'id' );
-
-		if ( ! window.confirm( strings.confirmDelete ) ) {
-			return;
-		}
+		const $cell = $btn.closest( '.vov-status-cell' );
 
 		$btn.prop( 'disabled', true ).text( strings.deleting );
 
@@ -193,39 +139,36 @@ jQuery( function ( $ ) {
 				if ( res.success ) {
 					location.reload();
 				} else {
-					alert( strings.error + res.data );
 					$btn.prop( 'disabled', false ).text( 'Delete Local File' );
+					$( '<p class="vov-error-msg">' ).text( strings.error + ( res.data || '' ) ).insertAfter( $btn );
 				}
 			} )
-			.fail( function () {
-				alert( strings.error + 'Request failed.' );
-				$btn.prop( 'disabled', false ).text( 'Delete Local File' );
-			} );
+			.fail( function () { $btn.prop( 'disabled', false ).text( 'Delete Local File' ); } );
 	} );
 
 	// -------------------------------------------------------------------------
-	// Bulk offload (admin page only)
+	// Bulk offload
 	// -------------------------------------------------------------------------
-	const $bulkBtn      = $( '#vov-bulk-offload' );
-	const $progressWrap = $( '#vov-bulk-progress' );
-	const $progressBar  = $( '#vov-progress-bar' );
-	const $progressText = $( '#vov-progress-text' );
+	$( '#vov-bulk-offload' ).on( 'click', function () {
+		const $bulkBtn      = $( this );
+		const $progressWrap = $( '#vov-bulk-progress' );
+		const $progressBar  = $( '#vov-progress-bar' );
+		const $progressText = $( '#vov-progress-text' );
 
-	$bulkBtn.on( 'click', function () {
-		const $btn = $( this );
-		$btn.prop( 'disabled', true );
+		$bulkBtn.prop( 'disabled', true );
 		$progressWrap.removeAttr( 'hidden' );
-		$( 'body' ).addClass( 'vov-offload-active' );
+		$( '.vov-bulk-spinner' ).show();
 
-		// Collect all "Offload" buttons currently visible on the page.
 		const ids = [];
-		$( '.vov-btn-offload' ).each( function () {
-			ids.push( $( this ).data( 'id' ) );
+		$( '.vov-status-cell' ).each( function () {
+			const s = $( this ).find( '.vov-badge' );
+			if ( s.hasClass( 'vov-badge--local' ) || s.hasClass( 'vov-badge--error' ) ) {
+				ids.push( parseInt( $( this ).data( 'attachment-id' ), 10 ) );
+			}
 		} );
 
 		if ( ids.length === 0 ) {
 			if ( $( '.vov-status-cell[data-auto-poll]' ).length > 0 ) {
-				// An upload is already in progress — let its auto-poll handle the reload.
 				$( '.vov-bulk-spinner' ).hide();
 				$progressText.text( 'Waiting for active upload to finish…' );
 				$bulkBtn.prop( 'disabled', false );
@@ -287,11 +230,42 @@ jQuery( function ( $ ) {
 	} );
 
 	// -------------------------------------------------------------------------
-	// Where is this used?
+	// Background GUID verification
+	// -------------------------------------------------------------------------
+	( function () {
+		const ONE_DAY_S  = 86400;
+		const nowSeconds = Math.floor( Date.now() / 1000 );
+		const verifyIds  = [];
+		$( '.vov-status-cell[data-verify-guid]' ).each( function () {
+			const lastVerified = parseInt( $( this ).attr( 'data-last-verified' ) || '0', 10 );
+			if ( ( nowSeconds - lastVerified ) > ONE_DAY_S ) {
+				verifyIds.push( parseInt( $( this ).attr( 'data-attachment-id' ), 10 ) );
+			}
+		} );
+		if ( verifyIds.length === 0 ) { return; }
+		let needsReload = false;
+		function verifyNext() {
+			if ( verifyIds.length === 0 ) {
+				if ( needsReload ) { location.reload(); }
+				return;
+			}
+			const id = verifyIds.shift();
+			request( 'vov_verify_guid', { attachment_id: id } )
+				.done( function ( res ) {
+					if ( res.success && res.data.exists === false ) { needsReload = true; }
+				} )
+				.always( verifyNext );
+		}
+		setTimeout( verifyNext, 2000 );
+	} )();
+
+	// -------------------------------------------------------------------------
+	// Find in content
 	// -------------------------------------------------------------------------
 	$( document ).on( 'click', '.vov-btn-find-used', function () {
 		const $btn  = $( this );
 		const $list = $btn.siblings( '.vov-used-in-list' );
+		const $note = $btn.siblings( '.vov-used-in-note' );
 		const id    = $btn.data( 'id' );
 
 		// Toggle visibility if already loaded.
@@ -299,9 +273,11 @@ jQuery( function ( $ ) {
 			const hidden = $list.is( '[hidden]' );
 			if ( hidden ) {
 				$list.removeAttr( 'hidden' );
+				$note.removeAttr( 'hidden' );
 				$btn.text( strings.hideUsedIn );
 			} else {
 				$list.attr( 'hidden', '' );
+				$note.attr( 'hidden', '' );
 				$btn.text( strings.whereUsed );
 			}
 			return;
@@ -319,7 +295,7 @@ jQuery( function ( $ ) {
 						const $li = $( '<li>' );
 						$( '<a>' ).attr( 'href', p.edit_url ).text( p.title ).appendTo( $li );
 						if ( p.type !== 'post' ) {
-							$li.append( document.createTextNode( ' ' ) );
+							$li.append( document.createTextNode( ' ' ) );
 							$( '<span>' ).addClass( 'vov-used-in-type' ).text( '(' + p.type + ')' ).appendTo( $li );
 						}
 						return $li[0];
@@ -327,6 +303,7 @@ jQuery( function ( $ ) {
 					: [ $( '<li>' ).addClass( 'vov-used-in-empty' ).text( strings.notUsed )[0] ];
 
 				$list.empty().append( $items ).removeAttr( 'hidden' );
+				$note.text( strings.usedInNote ).removeAttr( 'hidden' );
 				$btn.data( 'vov-loaded', true ).prop( 'disabled', false ).text( strings.hideUsedIn );
 			} )
 			.fail( function () { $btn.text( strings.whereUsed ).prop( 'disabled', false ); } );

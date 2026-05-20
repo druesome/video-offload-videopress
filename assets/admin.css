@@ -171,6 +171,13 @@ body.vov-offload-active .vov-btn-offload {
 	font-style: italic;
 }
 
+.vov-used-in-note {
+	margin: 4px 0 0;
+	font-size: 10px;
+	color: #aaa;
+	font-style: italic;
+}
+
 .vov-filesize {
 	display: block;
 	margin-top: 4px;

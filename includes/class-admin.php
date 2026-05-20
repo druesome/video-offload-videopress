@@ -54,9 +54,10 @@ class Admin {
 				'confirmDelete' => __( 'Are you sure you want to delete the local file? Before proceeding, please confirm that the video is already offloaded to VideoPress. This action cannot be undone.', 'video-offload-videopress' ),
 				'error'         => __( 'Error: ', 'video-offload-videopress' ),
 				'done'          => __( 'Done! Reloading…', 'video-offload-videopress' ),
-				'whereUsed'     => __( 'Where is this used?', 'video-offload-videopress' ),
+				'whereUsed'     => __( 'Find in content', 'video-offload-videopress' ),
 				'hideUsedIn'    => __( 'Hide', 'video-offload-videopress' ),
 				'notUsed'       => __( 'Not found in any content.', 'video-offload-videopress' ),
+				'usedInNote'    => __( 'Covers post content, Elementor, and Beaver Builder. Other page builders may not appear.', 'video-offload-videopress' ),
 			),
 		) );
 	}
@@ -276,9 +277,9 @@ class Admin {
 		}
 
 		printf(
-			'<button type="button" class="button-link vov-btn-find-used" data-id="%s">%s</button><ul class="vov-used-in-list" hidden></ul>',
+			'<button type="button" class="button-link vov-btn-find-used" data-id="%s">%s</button><ul class="vov-used-in-list" hidden></ul><p class="vov-used-in-note" hidden></p>',
 			$id,
-			esc_html__( 'Where is this used?', 'video-offload-videopress' )
+			esc_html__( 'Find in content', 'video-offload-videopress' )
 		);
 
 		echo '</div>';
@@ -423,9 +424,10 @@ class Admin {
 						<td><?php echo esc_html( $file_size ); ?></td>
 						<td>
 							<button type="button" class="button-link vov-btn-find-used" data-id="<?php echo esc_attr( $video->ID ); ?>">
-								<?php esc_html_e( 'Where is this used?', 'video-offload-videopress' ); ?>
+								<?php esc_html_e( 'Find in content', 'video-offload-videopress' ); ?>
 							</button>
 							<ul class="vov-used-in-list" hidden></ul>
+							<p class="vov-used-in-note" hidden></p>
 						</td>
 						<td><?php self::render_status_cell( $video->ID, Offloader::get_status( $video->ID ) ); ?></td>
 					</tr>

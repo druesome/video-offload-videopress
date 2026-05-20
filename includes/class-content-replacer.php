@@ -69,10 +69,15 @@ class Content_Replacer {
 	 */
 	public static function find_referencing_posts( int $attachment_id ): array {
 		$attachment_url = wp_get_attachment_url( $attachment_id );
+		if ( ! $attachment_url ) {
+			return array();
+		}
 
 		global $wpdb;
+		$like = '%' . $wpdb->esc_like( $attachment_url ) . '%';
 
-		return $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		// Search post_content (Gutenberg, classic editor, Divi shortcodes, bare URLs).
+		$content_results = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
 				"SELECT ID, post_title, post_type, post_status
 				 FROM {$wpdb->posts}
@@ -80,9 +85,35 @@ class Content_Replacer {
 				 AND post_type NOT IN ('revision', 'attachment', 'nav_menu_item')
 				 AND post_content LIKE %s
 				 ORDER BY post_modified DESC",
-				'%' . $wpdb->esc_like( $attachment_url ) . '%'
+				$like
 			)
 		);
+
+		// Search common page builder meta keys (Elementor, Beaver Builder).
+		$meta_results = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"SELECT DISTINCT p.ID, p.post_title, p.post_type, p.post_status
+				 FROM {$wpdb->posts} p
+				 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+				 WHERE p.post_status NOT IN ('trash', 'auto-draft')
+				 AND p.post_type NOT IN ('revision', 'attachment', 'nav_menu_item')
+				 AND pm.meta_key IN ('_elementor_data', '_fl_builder_data')
+				 AND pm.meta_value LIKE %s",
+				$like
+			)
+		);
+
+		// Merge, deduplicating by post ID.
+		$seen   = array();
+		$merged = array();
+		foreach ( array_merge( $content_results ?: array(), $meta_results ?: array() ) as $post ) {
+			if ( ! isset( $seen[ $post->ID ] ) ) {
+				$seen[ $post->ID ] = true;
+				$merged[]          = $post;
+			}
+		}
+
+		return $merged;
 	}
 
 	/**
