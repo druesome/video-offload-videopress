@@ -44,12 +44,17 @@ jQuery( function ( $ ) {
 
 		function updateBar() {
 			if ( ! fileSize ) { return; }
-			const max95 = Math.round( fileSize * 0.95 );
+			// All bytes delivered — VideoPress is assigning the GUID.
+			if ( realBytes >= fileSize ) {
+				$loading.find( '.vov-file-progress' ).removeAttr( 'value' );
+				$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( 'Finalizing…' );
+				return;
+			}
 			let candidate;
 			if ( realBytes > 0 ) {
-				// Project forward from last known position at the observed upload rate.
+				// Project forward at the observed upload rate between polls.
 				const projected = realBytes + uploadRate * ( Date.now() - lastPollTime );
-				candidate = Math.min( Math.round( projected ), max95 );
+				candidate = Math.min( Math.round( projected ), fileSize - 1 );
 			} else {
 				// Slow simulation (up to 15%) while waiting for first real chunk.
 				const elapsed = ( Date.now() - animStart ) / 1000;
@@ -58,7 +63,7 @@ jQuery( function ( $ ) {
 			const display = Math.max( candidate, lastDisplay );
 			lastDisplay = display;
 			const pct = Math.round( display / fileSize * 100 );
-			$loading.find( '.vov-file-progress' ).attr( 'max', fileSize ).val( display );
+			$loading.find( '.vov-file-progress' ).attr( { max: fileSize, value: display } );
 			$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
 		}
 
@@ -137,11 +142,15 @@ jQuery( function ( $ ) {
 
 		function updateBar() {
 			if ( ! fileSize ) { return; }
-			const max95 = Math.round( fileSize * 0.95 );
+			if ( realBytes >= fileSize ) {
+				$msg.find( '.vov-file-progress' ).removeAttr( 'value' );
+				$msg.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( 'Finalizing…' );
+				return;
+			}
 			let candidate;
 			if ( realBytes > 0 ) {
 				const projected = realBytes + uploadRate * ( Date.now() - lastPollTime );
-				candidate = Math.min( Math.round( projected ), max95 );
+				candidate = Math.min( Math.round( projected ), fileSize - 1 );
 			} else {
 				const elapsed = ( Date.now() - animStart ) / 1000;
 				candidate = Math.round( fileSize * 0.15 * ( 1 - Math.exp( -elapsed / 5 ) ) );
@@ -149,7 +158,7 @@ jQuery( function ( $ ) {
 			const display = Math.max( candidate, lastDisplay );
 			lastDisplay = display;
 			const pct = Math.round( display / fileSize * 100 );
-			$msg.find( '.vov-file-progress' ).attr( 'max', fileSize ).val( display );
+			$msg.find( '.vov-file-progress' ).attr( { max: fileSize, value: display } );
 			$msg.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
 		}
 
@@ -349,11 +358,16 @@ jQuery( function ( $ ) {
 
 			function updateCurrentBar() {
 				if ( ! fileSize ) { return; }
-				const max95 = Math.round( fileSize * 0.95 );
+				$currentFileProgress.removeAttr( 'hidden' );
+				if ( realBytes >= fileSize ) {
+					$currentFileBar.removeAttr( 'value' );
+					$currentFileText.text( 'Finalizing…' );
+					return;
+				}
 				let candidate;
 				if ( realBytes > 0 ) {
 					const projected = realBytes + uploadRate * ( Date.now() - lastPollTime );
-					candidate = Math.min( Math.round( projected ), max95 );
+					candidate = Math.min( Math.round( projected ), fileSize - 1 );
 				} else {
 					const elapsed = ( Date.now() - animStart ) / 1000;
 					candidate = Math.round( fileSize * 0.15 * ( 1 - Math.exp( -elapsed / 5 ) ) );
@@ -361,9 +375,8 @@ jQuery( function ( $ ) {
 				const display = Math.max( candidate, lastDisplay );
 				lastDisplay = display;
 				const pct = Math.round( display / fileSize * 100 );
-				$currentFileBar.attr( 'max', fileSize ).val( display );
+				$currentFileBar.attr( { max: fileSize, value: display } );
 				$currentFileText.text( pct + '%' );
-				$currentFileProgress.removeAttr( 'hidden' );
 			}
 
 			if ( fileSize > 0 ) {
