@@ -236,7 +236,8 @@ class Offloader {
 	 * @return array|\WP_Error
 	 */
 	public static function run_offload( int $attachment_id, ?callable $on_progress = null ) {
-		$upload_key = (string) ( get_post_meta( $attachment_id, self::UPLOAD_KEY_META, true ) ?: '' );
+		$upload_key    = (string) ( get_post_meta( $attachment_id, self::UPLOAD_KEY_META, true ) ?: '' );
+		$retried_fresh = false;
 
 		self::set_status( $attachment_id, self::STATUS_UPLOADING );
 
@@ -249,6 +250,16 @@ class Offloader {
 				if ( $jetpack_guid ) {
 					$result = array( 'guid' => $jetpack_guid, 'media_id' => 0 );
 					break;
+				}
+				// bytes_uploaded=-1 means the session expired with nothing received — restart fresh once.
+				$err_data       = $result->get_error_data();
+				$bytes_on_error = isset( $err_data['bytes_uploaded'] ) ? (int) $err_data['bytes_uploaded'] : 0;
+				if ( $bytes_on_error < 0 && ! $retried_fresh ) {
+					$upload_key    = '';
+					$retried_fresh = true;
+					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+					sleep( 2 );
+					continue;
 				}
 				delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
 				self::set_status( $attachment_id, self::STATUS_ERROR, $result->get_error_message() );
@@ -465,7 +476,21 @@ class Offloader {
 				// If we were already mid-upload when the error arrived, VideoPress is
 				// likely still processing. Retrying would create a duplicate video.
 				// Poll for the Jetpack GUID instead (up to ~30 s).
+				// Exception: bytes_uploaded=-1 means the session expired with nothing received,
+				// so it's safe to restart with a fresh session rather than wait for a GUID.
 				if ( $had_active_chunk ) {
+					$err_data       = $result->get_error_data();
+					$bytes_on_error = isset( $err_data['bytes_uploaded'] ) ? (int) $err_data['bytes_uploaded'] : 0;
+
+					if ( $bytes_on_error < 0 && ! $retried_fresh ) {
+						$upload_key       = '';
+						$had_active_chunk = false;
+						$retried_fresh    = true;
+						delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+						sleep( 2 );
+						continue;
+					}
+
 					$jetpack_guid = self::wait_for_jetpack_guid( $attachment_id, 10, 3 );
 					if ( $jetpack_guid ) {
 						delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );

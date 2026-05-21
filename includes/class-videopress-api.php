@@ -152,7 +152,8 @@ class VideoPress_API {
 				error_log( 'VOV VideoPress error response: ' . wp_json_encode( $data ) );
 				return new \WP_Error(
 					'videopress_error',
-					( $vp_msg ?: 'VideoPress upload failed' ) . ' | Full response: ' . wp_json_encode( $data )
+					( $vp_msg ?: 'VideoPress upload failed' ) . ' | Full response: ' . wp_json_encode( $data ),
+					array( 'bytes_uploaded' => (int) ( $data['bytes_uploaded'] ?? 0 ) )
 				);
 			}
 
