@@ -166,9 +166,6 @@ class CLI {
 		if ( ! VideoPress_API::is_connected() ) {
 			\WP_CLI::error( 'The site is not connected to WordPress.com. Please set up Jetpack.' );
 		}
-		if ( ! VideoPress_API::current_user_is_connected() ) {
-			\WP_CLI::error( 'Your WordPress.com account is not connected. Go to Jetpack → Dashboard and connect your user account.' );
-		}
 		if ( (int) get_option( 'blog_public' ) === -1 ) {
 			\WP_CLI::error( 'This site is set to private. VideoPress cannot fetch videos from a private site.' );
 		}
