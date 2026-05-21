@@ -108,7 +108,7 @@ class Admin {
 				'offloading'    => __( 'Uploading to VideoPress…', 'video-offload-videopress' ),
 				'replacing'     => __( 'Replacing in content…', 'video-offload-videopress' ),
 				'deleting'      => __( 'Deleting local file…', 'video-offload-videopress' ),
-				'confirmDelete'  => __( 'Are you sure you want to delete the local file? Before proceeding, please confirm that the video is already offloaded to VideoPress. This action cannot be undone.', 'video-offload-videopress' ),
+				'confirmDelete'  => __( 'Are you sure you want to delete the local file? Before proceeding, confirm that the video has been offloaded to VideoPress and replaced in all content where it appears. This action cannot be undone.', 'video-offload-videopress' ),
 				'error'          => __( 'Error: ', 'video-offload-videopress' ),
 				'done'           => __( 'Done! Reloading…', 'video-offload-videopress' ),
 				'whereUsed'      => __( 'Find in content', 'video-offload-videopress' ),
