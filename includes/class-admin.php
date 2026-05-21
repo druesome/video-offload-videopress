@@ -249,9 +249,9 @@ class Admin {
 			case Offloader::STATUS_UPLOADING:
 				if ( $is_fresh ) {
 					// Upload is in progress (e.g. user refreshed mid-upload).
-					// JS will auto-poll this cell until complete.
+					// JS will auto-poll this cell and transition to a progress bar.
 					echo '<span class="vov-badge vov-badge--uploading">' . esc_html__( 'Uploading…', 'video-offload-videopress' ) . '</span>';
-					echo '<span class="vov-uploading-msg"><span class="vov-spinner"></span>' . esc_html__( 'Offloading, please wait…', 'video-offload-videopress' ) . '</span>';
+					echo '<div class="vov-uploading-msg"><span class="vov-spinner"></span><progress class="vov-file-progress" value="0" max="100" hidden></progress><span class="vov-file-progress-pct" hidden></span></div>';
 				} else {
 					// Timestamp is old or missing — the previous attempt died.
 					echo '<span class="vov-badge vov-badge--uploading">' . esc_html__( 'Stuck', 'video-offload-videopress' ) . '</span>';

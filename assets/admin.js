@@ -75,8 +75,9 @@ jQuery( function ( $ ) {
 	// Auto-poll uploading cells on page load
 	// -------------------------------------------------------------------------
 	$( '.vov-status-cell[data-auto-poll]' ).each( function () {
-		const $cell = $( this );
-		const id    = $cell.data( 'attachment-id' );
+		const $cell    = $( this );
+		const id       = $cell.data( 'attachment-id' );
+		const $loading = $cell.find( '.vov-uploading-msg' );
 
 		function autoPoll( polls ) {
 			if ( polls >= 40 ) { return; }
@@ -86,6 +87,12 @@ jQuery( function ( $ ) {
 						if ( res.success && ( res.data.status === 'uploaded' || res.data.status === 'error' ) ) {
 							location.reload();
 						} else {
+							if ( res.data && res.data.file_size > 0 ) {
+								const pct = Math.round( res.data.bytes_uploaded / res.data.file_size * 100 );
+								$loading.find( '.vov-spinner' ).hide();
+								$loading.find( '.vov-file-progress' ).removeAttr( 'hidden' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
+								$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
+							}
 							autoPoll( polls + 1 );
 						}
 					} )
