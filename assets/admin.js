@@ -42,12 +42,10 @@ jQuery( function ( $ ) {
 
 		function updateBar() {
 			if ( ! fileSize ) { return; }
-			// τ scales with file size so large and small files animate at realistic speeds.
-			// Assumes ~5 MB/s server→VideoPress; bar reaches ~78% at the expected upload time.
-			const tau       = Math.max( 5, fileSize / 10000000 );
+			const tau       = Math.max( 5, fileSize / 15000000 );
 			const elapsed   = ( Date.now() - animStart ) / 1000;
-			const simulated = Math.round( fileSize * 0.9 * ( 1 - Math.exp( -elapsed / tau ) ) );
-			const real      = realBytes > 0 ? Math.min( realBytes, Math.round( fileSize * 0.9 ) ) : 0;
+			const simulated = Math.round( fileSize * 0.99 * ( 1 - Math.exp( -elapsed / tau ) ) );
+			const real      = realBytes > 0 ? Math.min( realBytes, Math.round( fileSize * 0.99 ) ) : 0;
 			const display   = Math.max( simulated, real, lastDisplay );
 			lastDisplay     = display;
 			const pct       = Math.round( display / fileSize * 100 );
@@ -85,7 +83,11 @@ jQuery( function ( $ ) {
 				clearTimeout( pollTimer );
 				clearInterval( animTimer );
 				if ( res.success ) {
-					location.reload();
+					if ( fileSize ) {
+						$loading.find( '.vov-file-progress' ).attr( { max: fileSize, value: fileSize } );
+						$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( '100%' );
+					}
+					setTimeout( () => location.reload(), 400 );
 				} else {
 					$loading.remove();
 					$btn.show();
@@ -124,10 +126,10 @@ jQuery( function ( $ ) {
 
 		function updateBar() {
 			if ( ! fileSize ) { return; }
-			const tau       = Math.max( 5, fileSize / 10000000 );
+			const tau       = Math.max( 5, fileSize / 15000000 );
 			const elapsed   = ( Date.now() - animStart ) / 1000;
-			const simulated = Math.round( fileSize * 0.9 * ( 1 - Math.exp( -elapsed / tau ) ) );
-			const real      = realBytes > 0 ? Math.min( realBytes, Math.round( fileSize * 0.9 ) ) : 0;
+			const simulated = Math.round( fileSize * 0.99 * ( 1 - Math.exp( -elapsed / tau ) ) );
+			const real      = realBytes > 0 ? Math.min( realBytes, Math.round( fileSize * 0.99 ) ) : 0;
 			const display   = Math.max( simulated, real, lastDisplay );
 			lastDisplay     = display;
 			const pct       = Math.round( display / fileSize * 100 );
@@ -141,7 +143,14 @@ jQuery( function ( $ ) {
 			setTimeout( function () {
 				request( 'vov_get_status', { attachment_id: id } )
 					.done( function ( res ) {
-						if ( res.success && ( res.data.status === 'uploaded' || res.data.status === 'error' ) ) {
+						if ( res.success && res.data.status === 'uploaded' ) {
+							clearInterval( animTimer );
+							if ( fileSize ) {
+								$msg.find( '.vov-file-progress' ).attr( { max: fileSize, value: fileSize } );
+								$msg.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( '100%' );
+							}
+							setTimeout( () => location.reload(), 400 );
+						} else if ( res.success && res.data.status === 'error' ) {
 							clearInterval( animTimer );
 							location.reload();
 						} else {
@@ -328,10 +337,10 @@ jQuery( function ( $ ) {
 			function updateCurrentBar() {
 				if ( ! fileSize ) { return; }
 				$currentFileProgress.removeAttr( 'hidden' );
-				const tau       = Math.max( 5, fileSize / 10000000 );
+				const tau       = Math.max( 5, fileSize / 15000000 );
 				const elapsed   = ( Date.now() - animStart ) / 1000;
-				const simulated = Math.round( fileSize * 0.9 * ( 1 - Math.exp( -elapsed / tau ) ) );
-				const real      = realBytes > 0 ? Math.min( realBytes, Math.round( fileSize * 0.9 ) ) : 0;
+				const simulated = Math.round( fileSize * 0.99 * ( 1 - Math.exp( -elapsed / tau ) ) );
+				const real      = realBytes > 0 ? Math.min( realBytes, Math.round( fileSize * 0.99 ) ) : 0;
 				const display   = Math.max( simulated, real, lastDisplay );
 				lastDisplay     = display;
 				const pct       = Math.round( display / fileSize * 100 );
@@ -364,7 +373,13 @@ jQuery( function ( $ ) {
 			currentFileTimer = setTimeout( pollCurrentFileProgress, 3000 );
 
 			request( 'vov_offload_video', { attachment_id: id } )
-				.done( function () { stopCurrentFileProgress(); onBulkItemDone(); } )
+				.done( function () {
+					if ( fileSize ) {
+						$currentFileBar.attr( { max: fileSize, value: fileSize } );
+						$currentFileText.text( '100%' );
+					}
+					setTimeout( function () { stopCurrentFileProgress(); onBulkItemDone(); }, 400 );
+				} )
 				.fail( function () { stopCurrentFileProgress(); pollOne( id, 0 ); } );
 		}
 
