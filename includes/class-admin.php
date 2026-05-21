@@ -92,7 +92,7 @@ class Admin {
 	}
 
 	public static function enqueue_assets( string $hook ): void {
-		$allowed_hooks = array( 'media_page_video-offload-videopress', 'upload.php', 'post.php', 'post-new.php' );
+		$allowed_hooks = array( 'media_page_video-offload-videopress', 'media_page_video-offload-videopress-settings', 'upload.php', 'post.php', 'post-new.php' );
 
 		if ( ! in_array( $hook, $allowed_hooks, true ) ) {
 			return;
@@ -423,6 +423,12 @@ class Admin {
 					</li>
 				</ul>
 			</details>
+
+			<p class="vov-settings-link">
+				<a href="<?php echo esc_url( admin_url( 'upload.php?page=video-offload-videopress-settings' ) ); ?>">
+					<?php esc_html_e( 'Settings', 'video-offload-videopress' ); ?>
+				</a>
+			</p>
 
 			<div class="vov-summary card">
 				<?php if ( $total > 0 ) : ?>

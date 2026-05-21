@@ -198,6 +198,25 @@ body.vov-offload-active .vov-btn-offload {
 	text-decoration: underline;
 }
 
+.vov-settings-link {
+	margin: 0 0 16px;
+}
+
+.vov-settings-link a {
+	font-size: 13px;
+	color: #50575e;
+	text-decoration: none;
+}
+
+.vov-settings-link a::before {
+	content: "⚙ ";
+}
+
+.vov-settings-link a:hover {
+	color: var(--vov-green-dark);
+	text-decoration: underline;
+}
+
 .vov-local-deleted {
 	font-size: 11px;
 	color: #888;
