@@ -26,19 +26,30 @@ jQuery( function ( $ ) {
 		$btn.hide();
 		$cell.find( '.vov-badge' ).attr( 'class', 'vov-badge vov-badge--uploading' ).text( strings.offloading );
 
-		const $loading = $( '<div class="vov-uploading-msg"><span class="vov-spinner"></span><progress class="vov-file-progress" value="0" max="100" hidden></progress><span class="vov-file-progress-pct" hidden></span></div>' );
+		// Show indeterminate bar immediately; upgrade to determinate once file_size is known.
+		const $loading = $( '<div class="vov-uploading-msg"><span class="vov-spinner"></span><progress class="vov-file-progress"></progress><span class="vov-file-progress-pct" hidden></span></div>' );
 		$btn.after( $loading );
 
 		// Poll for byte-level progress while vov_offload_video runs server-side.
 		// The upload loop is synchronous PHP, so we poll concurrently.
 		let progressTimer = null;
+		let simulatedBytes = 0;
 		function pollProgress() {
 			request( 'vov_get_status', { attachment_id: id } )
 				.done( function ( res ) {
 					if ( res.success && res.data && res.data.file_size > 0 ) {
-						const pct = Math.round( res.data.bytes_uploaded / res.data.file_size * 100 );
+						const fs   = res.data.file_size;
+						const real = res.data.bytes_uploaded;
+						// Prefer real bytes from VideoPress; otherwise advance a simulation
+						// at ~3 % per poll so the bar visibly fills during upload.
+						if ( real > simulatedBytes ) {
+							simulatedBytes = real;
+						} else {
+							simulatedBytes = Math.min( simulatedBytes + Math.round( fs * 0.03 ), Math.round( fs * 0.90 ) );
+						}
+						const pct = Math.round( simulatedBytes / fs * 100 );
 						$loading.find( '.vov-spinner' ).hide();
-						$loading.find( '.vov-file-progress' ).removeAttr( 'hidden' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
+						$loading.find( '.vov-file-progress' ).attr( 'max', fs ).val( simulatedBytes );
 						$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
 					}
 				} )
@@ -78,6 +89,11 @@ jQuery( function ( $ ) {
 		const $cell = $( this );
 		const id    = $cell.data( 'attachment-id' );
 
+		// Replace PHP-rendered spinner with an indeterminate progress bar immediately.
+		const $msg = $( '<div class="vov-uploading-msg"><progress class="vov-file-progress"></progress><span class="vov-file-progress-pct" hidden></span></div>' );
+		$cell.find( '.vov-uploading-msg' ).replaceWith( $msg );
+
+		let simulatedBytes = 0;
 		function autoPoll( polls ) {
 			if ( polls >= 40 ) { return; }
 			setTimeout( function () {
@@ -86,6 +102,18 @@ jQuery( function ( $ ) {
 						if ( res.success && ( res.data.status === 'uploaded' || res.data.status === 'error' ) ) {
 							location.reload();
 						} else {
+							if ( res.data && res.data.file_size > 0 ) {
+								const fs   = res.data.file_size;
+								const real = res.data.bytes_uploaded;
+								if ( real > simulatedBytes ) {
+									simulatedBytes = real;
+								} else {
+									simulatedBytes = Math.min( simulatedBytes + Math.round( fs * 0.03 ), Math.round( fs * 0.90 ) );
+								}
+								const pct = Math.round( simulatedBytes / fs * 100 );
+								$msg.find( '.vov-file-progress' ).attr( 'max', fs ).val( simulatedBytes );
+								$msg.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
+							}
 							autoPoll( polls + 1 );
 						}
 					} )

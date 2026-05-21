@@ -547,12 +547,23 @@ class Offloader {
 			wp_send_json_error( 'Invalid attachment ID.' );
 		}
 
-		$status_data = self::get_status( $attachment_id );
-		$progress    = get_post_meta( $attachment_id, self::PROGRESS_META, true );
+		$status_data    = self::get_status( $attachment_id );
+		$progress       = get_post_meta( $attachment_id, self::PROGRESS_META, true );
+		$bytes_uploaded = isset( $progress['bytes_uploaded'] ) ? (int) $progress['bytes_uploaded'] : 0;
+		$file_size      = isset( $progress['file_size'] )      ? (int) $progress['file_size']      : 0;
+
+		// VideoPress often omits file_size from chunked upload responses.
+		// Fall back to the local file so JS always has a denominator to work with.
+		if ( $file_size === 0 && self::STATUS_UPLOADING === $status_data['status'] ) {
+			$local_file = get_attached_file( $attachment_id );
+			if ( $local_file && file_exists( $local_file ) ) {
+				$file_size = (int) filesize( $local_file );
+			}
+		}
 
 		wp_send_json_success( array_merge( $status_data, array(
-			'bytes_uploaded' => isset( $progress['bytes_uploaded'] ) ? (int) $progress['bytes_uploaded'] : 0,
-			'file_size'      => isset( $progress['file_size'] ) ? (int) $progress['file_size'] : 0,
+			'bytes_uploaded' => $bytes_uploaded,
+			'file_size'      => $file_size,
 		) ) );
 	}
 
