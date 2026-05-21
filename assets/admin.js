@@ -36,7 +36,7 @@ jQuery( function ( $ ) {
 		function pollProgress() {
 			request( 'vov_get_status', { attachment_id: id } )
 				.done( function ( res ) {
-					if ( res.success && res.data && res.data.file_size > 0 ) {
+					if ( res.success && res.data && res.data.file_size > 0 && res.data.bytes_uploaded > 0 ) {
 						const pct = Math.round( res.data.bytes_uploaded / res.data.file_size * 100 );
 						$loading.find( '.vov-file-progress' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
 						$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
@@ -91,7 +91,7 @@ jQuery( function ( $ ) {
 						if ( res.success && ( res.data.status === 'uploaded' || res.data.status === 'error' ) ) {
 							location.reload();
 						} else {
-							if ( res.data && res.data.file_size > 0 ) {
+							if ( res.data && res.data.file_size > 0 && res.data.bytes_uploaded > 0 ) {
 								const pct = Math.round( res.data.bytes_uploaded / res.data.file_size * 100 );
 								$msg.find( '.vov-file-progress' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
 								$msg.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );

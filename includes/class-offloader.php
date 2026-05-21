@@ -447,6 +447,7 @@ class Offloader {
 		$retried_fresh    = false;
 		$had_active_chunk = false; // True once VideoPress starts a chunked session.
 		$result           = null;
+		$chunk_num        = 0;    // Count of 'uploading' responses (chunks sent).
 
 		self::set_status( $attachment_id, self::STATUS_UPLOADING );
 
@@ -495,6 +496,7 @@ class Offloader {
 
 			if ( ! empty( $result['uploading'] ) ) {
 				$had_active_chunk = true;
+				$chunk_num++;
 				$upload_key       = (string) ( $result['upload_key'] ?? $upload_key );
 				if ( $upload_key ) {
 					update_post_meta( $attachment_id, self::UPLOAD_KEY_META, $upload_key );
@@ -508,6 +510,7 @@ class Offloader {
 				update_post_meta( $attachment_id, self::PROGRESS_META, array(
 					'bytes_uploaded' => $bytes_done,
 					'file_size'      => $bytes_total,
+					'chunk_num'      => $chunk_num,
 				) );
 				continue;
 			}
@@ -557,12 +560,20 @@ class Offloader {
 		$progress       = get_post_meta( $attachment_id, self::PROGRESS_META, true );
 		$bytes_uploaded = isset( $progress['bytes_uploaded'] ) ? (int) $progress['bytes_uploaded'] : 0;
 		$file_size      = isset( $progress['file_size'] )      ? (int) $progress['file_size']      : 0;
+		$chunk_num      = isset( $progress['chunk_num'] )      ? (int) $progress['chunk_num']      : 0;
 
 		if ( $file_size === 0 && self::STATUS_UPLOADING === $status_data['status'] ) {
 			$local_file = get_attached_file( $attachment_id );
 			if ( $local_file && file_exists( $local_file ) ) {
 				$file_size = (int) filesize( $local_file );
 			}
+		}
+
+		// VideoPress doesn't always report bytes_uploaded per chunk.
+		// Estimate from chunk count using a 4 MB chunk size assumption,
+		// capping at file_size - 1 so we never falsely show 100%.
+		if ( $bytes_uploaded === 0 && $chunk_num > 0 && $file_size > 0 ) {
+			$bytes_uploaded = min( $chunk_num * 4 * 1024 * 1024, $file_size - 1 );
 		}
 
 		wp_send_json_success( array_merge( $status_data, array(
