@@ -169,8 +169,34 @@ jQuery( function ( $ ) {
 	} );
 
 	// -------------------------------------------------------------------------
-	// Bulk offload
+	// Bulk offload — select all / deselect all + dynamic button label
 	// -------------------------------------------------------------------------
+	function updateBulkButton() {
+		const $btn     = $( '#vov-bulk-offload' );
+		const total    = $( '.vov-select-video' ).length;
+		const checked  = $( '.vov-select-video:checked' ).length;
+		if ( checked === 0 ) {
+			$btn.prop( 'disabled', true ).text( 'Offload to VideoPress' );
+		} else if ( checked === total ) {
+			$btn.prop( 'disabled', false ).text( 'Offload All to VideoPress' );
+		} else {
+			$btn.prop( 'disabled', false ).text( 'Offload Selected (' + checked + ')' );
+		}
+		$( '#vov-select-all' ).prop( 'indeterminate', checked > 0 && checked < total );
+		$( '#vov-select-all' ).prop( 'checked', checked === total && total > 0 );
+	}
+
+	$( '#vov-select-all' ).on( 'change', function () {
+		$( '.vov-select-video' ).prop( 'checked', $( this ).is( ':checked' ) );
+		updateBulkButton();
+	} );
+
+	$( document ).on( 'change', '.vov-select-video', function () {
+		updateBulkButton();
+	} );
+
+	updateBulkButton();
+
 	$( '#vov-bulk-offload' ).on( 'click', function () {
 		const $bulkBtn      = $( this );
 		const $progressWrap = $( '#vov-bulk-progress' );
@@ -182,11 +208,8 @@ jQuery( function ( $ ) {
 		$( '.vov-bulk-spinner' ).show();
 
 		const ids = [];
-		$( '.vov-status-cell' ).each( function () {
-			const s = $( this ).find( '.vov-badge' );
-			if ( s.hasClass( 'vov-badge--local' ) || s.hasClass( 'vov-badge--error' ) ) {
-				ids.push( parseInt( $( this ).data( 'attachment-id' ), 10 ) );
-			}
+		$( '.vov-select-video:checked' ).each( function () {
+			ids.push( parseInt( $( this ).val(), 10 ) );
 		} );
 
 		if ( ids.length === 0 ) {

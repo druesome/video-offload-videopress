@@ -466,6 +466,7 @@ class Admin {
 			<table class="wp-list-table widefat fixed striped vov-table">
 				<thead>
 					<tr>
+						<td class="manage-column check-column"><input type="checkbox" id="vov-select-all"></td>
 						<th class="column-title column-primary"><?php esc_html_e( 'Video', 'video-offload-videopress' ); ?></th>
 						<th><?php esc_html_e( 'Type', 'video-offload-videopress' ); ?></th>
 						<th><?php esc_html_e( 'File Size', 'video-offload-videopress' ); ?></th>
@@ -475,11 +476,18 @@ class Admin {
 				</thead>
 				<tbody>
 					<?php foreach ( $videos as $video ) :
-						$file      = get_attached_file( $video->ID );
-						$file_size = $file && file_exists( $file ) ? size_format( filesize( $file ) ) : '—';
-						$mime      = get_post_mime_type( $video->ID );
+						$file        = get_attached_file( $video->ID );
+						$file_size   = $file && file_exists( $file ) ? size_format( filesize( $file ) ) : '—';
+						$mime        = get_post_mime_type( $video->ID );
+						$status_data = Offloader::get_status( $video->ID );
+						$offloadable = in_array( $status_data['status'], array( Offloader::STATUS_NONE, Offloader::STATUS_ERROR ), true );
 					?>
 					<tr id="vov-row-<?php echo esc_attr( $video->ID ); ?>">
+						<th class="check-column">
+							<?php if ( $offloadable ) : ?>
+								<input type="checkbox" class="vov-select-video" value="<?php echo esc_attr( $video->ID ); ?>" checked>
+							<?php endif; ?>
+						</th>
 						<td class="column-title column-primary">
 							<strong><?php echo esc_html( $video->post_title ?: basename( $file ) ); ?></strong>
 							<br><small class="vov-filename"><?php echo esc_html( basename( (string) $file ) ); ?></small>
@@ -493,7 +501,7 @@ class Admin {
 							<ul class="vov-used-in-list" hidden></ul>
 							<p class="vov-used-in-note" hidden></p>
 						</td>
-						<td><?php self::render_status_cell( $video->ID, Offloader::get_status( $video->ID ) ); ?></td>
+						<td><?php self::render_status_cell( $video->ID, $status_data ); ?></td>
 					</tr>
 					<?php endforeach; ?>
 				</tbody>
