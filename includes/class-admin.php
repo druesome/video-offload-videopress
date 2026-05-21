@@ -32,6 +32,63 @@ class Admin {
 			'video-offload-videopress',
 			array( self::class, 'render_admin_page' )
 		);
+		add_submenu_page(
+			'upload.php',
+			__( 'VideoPress Offload Settings', 'video-offload-videopress' ),
+			__( 'VideoPress Offload Settings', 'video-offload-videopress' ),
+			'manage_options',
+			'video-offload-videopress-settings',
+			array( self::class, 'render_settings_page' )
+		);
+
+		register_setting(
+			'vov_settings',
+			'vov_batch_size',
+			array(
+				'type'              => 'integer',
+				'default'           => 50,
+				'sanitize_callback' => function ( $val ) {
+					$val = (int) $val;
+					return max( 1, min( 200, $val ) );
+				},
+			)
+		);
+		add_settings_section( 'vov_section_bulk', __( 'Bulk Offload', 'video-offload-videopress' ), '__return_false', 'vov_settings' );
+		add_settings_field(
+			'vov_batch_size',
+			__( 'Batch size', 'video-offload-videopress' ),
+			array( self::class, 'render_batch_size_field' ),
+			'vov_settings',
+			'vov_section_bulk'
+		);
+	}
+
+	public static function render_batch_size_field(): void {
+		$value = (int) get_option( 'vov_batch_size', 50 );
+		printf(
+			'<input type="number" id="vov_batch_size" name="vov_batch_size" value="%d" min="1" max="200" class="small-text">
+			<p class="description">%s</p>',
+			$value,
+			esc_html__( 'Number of videos shown and processed per page during bulk offload. Lower values reduce server load; higher values mean fewer page reloads. (1–200)', 'video-offload-videopress' )
+		);
+	}
+
+	public static function render_settings_page(): void {
+		?>
+		<div class="wrap">
+			<h1 class="vov-page-title">
+				<img src="<?php echo esc_url( VOV_PLUGIN_URL . 'assets/vp-logo.png' ); ?>" alt="" class="vov-page-title__logo" width="28" height="28" aria-hidden="true">
+				<?php esc_html_e( 'VideoPress Offload Settings', 'video-offload-videopress' ); ?>
+			</h1>
+			<form method="post" action="options.php">
+				<?php
+				settings_fields( 'vov_settings' );
+				do_settings_sections( 'vov_settings' );
+				submit_button();
+				?>
+			</form>
+		</div>
+		<?php
 	}
 
 	public static function enqueue_assets( string $hook ): void {
@@ -310,8 +367,9 @@ class Admin {
 		$vp_active     = $is_connected && \Jetpack::is_module_active( 'videopress' );
 		$site_private  = (int) get_option( 'blog_public' ) === -1;
 		$ready         = $is_connected && $vp_active && ! $site_private;
+		$batch_size    = (int) get_option( 'vov_batch_size', 50 );
 		$total         = $ready ? Offloader::count_local_videos() : 0;
-		$videos        = $ready ? Offloader::get_local_videos( 0, 50 ) : array();
+		$videos        = $ready ? Offloader::get_local_videos( 0, $batch_size ) : array();
 		?>
 		<div class="wrap vov-wrap">
 			<h1 class="vov-page-title">
@@ -378,12 +436,12 @@ class Admin {
 					<button class="button button-primary" id="vov-bulk-offload">
 						<?php esc_html_e( 'Offload All to VideoPress', 'video-offload-videopress' ); ?>
 					</button>
-					<?php if ( $total > 50 ) : ?>
+					<?php if ( $total > $batch_size ) : ?>
 						<p class="description">
 							<?php printf(
 								/* translators: 1: batch size, 2: total count */
 								esc_html__( 'Showing the first %1$d of %2$d videos. The page will reload automatically after each batch.', 'video-offload-videopress' ),
-								min( 50, count( $videos ) ),
+								min( $batch_size, count( $videos ) ),
 								(int) $total
 							); ?>
 						</p>
