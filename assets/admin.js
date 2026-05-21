@@ -75,27 +75,28 @@ jQuery( function ( $ ) {
 	// Auto-poll uploading cells on page load
 	// -------------------------------------------------------------------------
 	$( '.vov-status-cell[data-auto-poll]' ).each( function () {
-		const $cell    = $( this );
-		const id       = $cell.data( 'attachment-id' );
-		const $loading = $cell.find( '.vov-uploading-msg' );
+		const $cell = $( this );
+		const id    = $cell.data( 'attachment-id' );
 
 		function autoPoll( polls ) {
 			if ( polls >= 40 ) { return; }
-			request( 'vov_get_status', { attachment_id: id } )
-				.done( function ( res ) {
-					if ( res.success && ( res.data.status === 'uploaded' || res.data.status === 'error' ) ) {
-						location.reload();
-					} else {
-						if ( res.data && res.data.file_size > 0 ) {
-							const pct = Math.round( res.data.bytes_uploaded / res.data.file_size * 100 );
-							$loading.find( '.vov-spinner' ).hide();
-							$loading.find( '.vov-file-progress' ).removeAttr( 'hidden' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
-							$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
+			setTimeout( function () {
+				request( 'vov_get_status', { attachment_id: id } )
+					.done( function ( res ) {
+						if ( res.success && ( res.data.status === 'uploaded' || res.data.status === 'error' ) ) {
+							location.reload();
+						} else {
+							if ( res.data && res.data.file_size > 0 ) {
+								const pct = Math.round( res.data.bytes_uploaded / res.data.file_size * 100 );
+								$cell.find( '.vov-spinner' ).hide();
+								$cell.find( '.vov-file-progress' ).removeAttr( 'hidden' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
+								$cell.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
+							}
+							autoPoll( polls + 1 );
 						}
-						setTimeout( function () { autoPoll( polls + 1 ); }, 3000 );
-					}
-				} )
-				.fail( function () { setTimeout( function () { autoPoll( polls + 1 ); }, 3000 ); } );
+					} )
+					.fail( function () { autoPoll( polls + 1 ); } );
+			}, 3000 );
 		}
 		autoPoll( 0 );
 	} );
