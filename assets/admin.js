@@ -104,6 +104,8 @@ jQuery( function ( $ ) {
 	// Replace in Content
 	// -------------------------------------------------------------------------
 	$( document ).on( 'click', '.vov-btn-replace', function () {
+		if ( ! window.confirm( strings.confirmReplace ) ) { return; }
+
 		const $btn  = $( this );
 		const id    = $btn.data( 'id' );
 		const $cell = $btn.closest( '.vov-status-cell' );
