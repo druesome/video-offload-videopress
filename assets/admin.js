@@ -29,42 +29,30 @@ jQuery( function ( $ ) {
 		const $loading = $( '<div class="vov-uploading-msg"><span class="vov-spinner"></span><progress class="vov-file-progress" value="0" max="100" hidden></progress><span class="vov-file-progress-pct" hidden></span></div>' );
 		$btn.after( $loading );
 
-		function poll( uploadKey, polls ) {
-			if ( polls >= 40 ) {
-				$loading.remove();
-				$btn.show();
-				$cell.find( '.vov-badge' ).attr( 'class', 'vov-badge vov-badge--error' ).text( 'Timeout' );
-				$( 'body' ).removeClass( 'vov-offload-active' );
-				offloadActive = false;
-				return;
-			}
-			setTimeout( function () {
-				request( 'vov_get_status', { attachment_id: id } )
-					.done( function ( res ) {
-						if ( res.success && ( res.data.status === 'uploaded' || res.data.status === 'error' ) ) {
-							location.reload();
-						} else {
-							if ( res.data && res.data.file_size > 0 ) {
-								const pct = Math.round( res.data.bytes_uploaded / res.data.file_size * 100 );
-								$loading.find( '.vov-spinner' ).hide();
-								$loading.find( '.vov-file-progress' ).removeAttr( 'hidden' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
-								$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
-							}
-							poll( uploadKey, polls + 1 );
-						}
-					} )
-					.fail( function () { poll( uploadKey, polls + 1 ); } );
-			}, 3000 );
+		// Poll for byte-level progress while vov_offload_video runs server-side.
+		// The upload loop is synchronous PHP, so we poll concurrently.
+		let progressTimer = null;
+		function pollProgress() {
+			request( 'vov_get_status', { attachment_id: id } )
+				.done( function ( res ) {
+					if ( res.success && res.data && res.data.file_size > 0 ) {
+						const pct = Math.round( res.data.bytes_uploaded / res.data.file_size * 100 );
+						$loading.find( '.vov-spinner' ).hide();
+						$loading.find( '.vov-file-progress' ).removeAttr( 'hidden' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
+						$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
+					}
+				} )
+				.always( function () {
+					progressTimer = setTimeout( pollProgress, 3000 );
+				} );
 		}
+		progressTimer = setTimeout( pollProgress, 3000 );
 
 		request( 'vov_offload_video', { attachment_id: id } )
 			.done( function ( res ) {
+				clearTimeout( progressTimer );
 				if ( res.success ) {
-					if ( res.data && res.data.status === 'uploading' ) {
-						poll( res.data.upload_key || '', 0 );
-					} else {
-						location.reload();
-					}
+					location.reload();
 				} else {
 					$loading.remove();
 					$btn.show();
@@ -75,6 +63,7 @@ jQuery( function ( $ ) {
 				}
 			} )
 			.fail( function () {
+				clearTimeout( progressTimer );
 				$loading.remove();
 				$btn.show();
 				$( 'body' ).removeClass( 'vov-offload-active' );
