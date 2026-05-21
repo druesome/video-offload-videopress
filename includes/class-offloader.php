@@ -232,9 +232,10 @@ class Offloader {
 	/**
 	 * Synchronous full-upload loop — handles chunked transfers. Used by WP-CLI.
 	 *
+	 * @param callable|null $on_progress Called on each chunk: fn( int $bytes_uploaded, int $file_size )
 	 * @return array|\WP_Error
 	 */
-	public static function run_offload( int $attachment_id ) {
+	public static function run_offload( int $attachment_id, ?callable $on_progress = null ) {
 		$upload_key = (string) ( get_post_meta( $attachment_id, self::UPLOAD_KEY_META, true ) ?: '' );
 
 		self::set_status( $attachment_id, self::STATUS_UPLOADING );
@@ -258,6 +259,9 @@ class Offloader {
 				$upload_key = (string) ( $result['upload_key'] ?? $upload_key );
 				if ( $upload_key ) {
 					update_post_meta( $attachment_id, self::UPLOAD_KEY_META, $upload_key );
+				}
+				if ( $on_progress && isset( $result['bytes_uploaded'], $result['file_size'] ) ) {
+					$on_progress( (int) $result['bytes_uploaded'], (int) $result['file_size'] );
 				}
 				continue;
 			}

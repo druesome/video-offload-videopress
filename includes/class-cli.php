@@ -78,22 +78,45 @@ class CLI {
 			return;
 		}
 
-		$progress = \WP_CLI\Utils\make_progress_bar( 'Offloading', count( $videos ) );
-		$success  = 0;
-		$failed   = 0;
+		$total   = count( $videos );
+		$success = 0;
+		$failed  = 0;
+		$i       = 0;
 
 		foreach ( $videos as $video ) {
-			$result = Offloader::run_offload( $video->ID );
+			$i++;
+			$file      = get_attached_file( $video->ID );
+			$file_size = ( $file && file_exists( $file ) ) ? (int) filesize( $file ) : 0;
+			$label     = sprintf( '[%d/%d] %s', $i, $total, $video->post_title ?: basename( (string) $file ) );
+
+			$bar        = $file_size > 0 ? \WP_CLI\Utils\make_progress_bar( $label, $file_size ) : null;
+			$last_bytes = 0;
+
+			$result = Offloader::run_offload( $video->ID, function ( int $bytes_uploaded, int $fs ) use ( &$bar, &$last_bytes, $label, $file_size ) {
+				if ( ! $bar && $fs > 0 ) {
+					$bar = \WP_CLI\Utils\make_progress_bar( $label, $fs );
+				}
+				if ( $bar ) {
+					$delta = $bytes_uploaded - $last_bytes;
+					if ( $delta > 0 ) {
+						$bar->tick( $delta );
+						$last_bytes = $bytes_uploaded;
+					}
+				}
+			} );
+
+			if ( $bar ) {
+				$bar->finish();
+			}
+
 			if ( is_wp_error( $result ) ) {
 				\WP_CLI::warning( sprintf( '[%d] %s — %s', $video->ID, $video->post_title, $result->get_error_message() ) );
 				$failed++;
 			} else {
 				$success++;
 			}
-			$progress->tick();
 		}
 
-		$progress->finish();
 		\WP_CLI::success( sprintf( 'Done. %d offloaded, %d failed.', $success, $failed ) );
 	}
 
