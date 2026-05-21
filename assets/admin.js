@@ -79,27 +79,30 @@ jQuery( function ( $ ) {
 		const id       = $cell.data( 'attachment-id' );
 		const $loading = $cell.find( '.vov-uploading-msg' );
 
-		function autoPoll( polls ) {
-			if ( polls >= 40 ) { return; }
-			setTimeout( function () {
-				request( 'vov_get_status', { attachment_id: id } )
-					.done( function ( res ) {
-						if ( res.success && ( res.data.status === 'uploaded' || res.data.status === 'error' ) ) {
-							location.reload();
-						} else {
-							if ( res.data && res.data.file_size > 0 ) {
-								const pct = Math.round( res.data.bytes_uploaded / res.data.file_size * 100 );
-								$loading.find( '.vov-spinner' ).hide();
-								$loading.find( '.vov-file-progress' ).removeAttr( 'hidden' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
-								$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
-							}
-							autoPoll( polls + 1 );
-						}
-					} )
-					.fail( function () { autoPoll( polls + 1 ); } );
-			}, 3000 );
+		// Resume the upload (in case it stopped when the page was refreshed)
+		// and poll for byte progress concurrently — same pattern as a button click.
+		let progressTimer = null;
+		function pollProgress() {
+			request( 'vov_get_status', { attachment_id: id } )
+				.done( function ( res ) {
+					if ( res.data && res.data.file_size > 0 ) {
+						const pct = Math.round( res.data.bytes_uploaded / res.data.file_size * 100 );
+						$loading.find( '.vov-spinner' ).hide();
+						$loading.find( '.vov-file-progress' ).removeAttr( 'hidden' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
+						$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
+					}
+				} )
+				.always( function () {
+					progressTimer = setTimeout( pollProgress, 3000 );
+				} );
 		}
-		autoPoll( 0 );
+		progressTimer = setTimeout( pollProgress, 3000 );
+
+		request( 'vov_offload_video', { attachment_id: id } )
+			.always( function () {
+				clearTimeout( progressTimer );
+				location.reload();
+			} );
 	} );
 
 	// -------------------------------------------------------------------------
