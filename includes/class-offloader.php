@@ -206,6 +206,81 @@ class Offloader {
 		return (int) get_option( self::SAVED_BYTES_OPTION, 0 );
 	}
 
+	/**
+	 * Return IDs of offloaded attachments whose local file still exists on disk.
+	 *
+	 * @return int[]
+	 */
+	public static function get_offloaded_with_local(): array {
+		global $wpdb;
+		$ids = $wpdb->get_col( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = %s",
+			self::STATUS_META,
+			self::STATUS_UPLOADED
+		) );
+
+		$result = array();
+		foreach ( array_map( 'intval', $ids ?: array() ) as $id ) {
+			$file = get_attached_file( $id );
+			if ( $file && file_exists( $file ) ) {
+				$result[] = $id;
+			}
+		}
+		return $result;
+	}
+
+	/**
+	 * Synchronous full-upload loop — handles chunked transfers. Used by WP-CLI.
+	 *
+	 * @return array|\WP_Error
+	 */
+	public static function run_offload( int $attachment_id ) {
+		$upload_key = (string) ( get_post_meta( $attachment_id, self::UPLOAD_KEY_META, true ) ?: '' );
+
+		self::set_status( $attachment_id, self::STATUS_UPLOADING );
+
+		$result = null;
+		for ( $i = 0; $i < 120; $i++ ) {
+			$result = VideoPress_API::upload_video( $attachment_id, $upload_key );
+
+			if ( is_wp_error( $result ) ) {
+				$jetpack_guid = get_post_meta( $attachment_id, 'videopress_guid', true );
+				if ( $jetpack_guid ) {
+					$result = array( 'guid' => $jetpack_guid, 'media_id' => 0 );
+					break;
+				}
+				delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+				self::set_status( $attachment_id, self::STATUS_ERROR, $result->get_error_message() );
+				return $result;
+			}
+
+			if ( ! empty( $result['uploading'] ) ) {
+				$upload_key = (string) ( $result['upload_key'] ?? $upload_key );
+				if ( $upload_key ) {
+					update_post_meta( $attachment_id, self::UPLOAD_KEY_META, $upload_key );
+				}
+				continue;
+			}
+
+			break;
+		}
+
+		if ( $result && ! empty( $result['uploading'] ) ) {
+			self::set_status( $attachment_id, self::STATUS_ERROR, 'Upload timed out.' );
+			return new \WP_Error( 'timeout', 'Upload timed out.' );
+		}
+
+		delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+		update_post_meta( $attachment_id, self::GUID_META, sanitize_text_field( $result['guid'] ) );
+		if ( ! empty( $result['media_id'] ) ) {
+			update_post_meta( $attachment_id, self::MEDIA_ID_META, (int) $result['media_id'] );
+		}
+		self::store_source_url( $attachment_id, $result['guid'] );
+		self::set_status( $attachment_id, self::STATUS_UPLOADED );
+
+		return $result;
+	}
+
 	public static function get_status( int $attachment_id ): array {
 		$status = get_post_meta( $attachment_id, self::STATUS_META, true ) ?: self::STATUS_NONE;
 		$guid   = get_post_meta( $attachment_id, self::GUID_META, true );

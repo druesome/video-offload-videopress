@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Video Offload for VideoPress
  * Description: Offloads locally-stored videos to VideoPress via Jetpack. Requires a Jetpack plan that includes VideoPress.
- * Version: 1.4.7
+ * Version: 1.4.8
  * Requires Plugins: jetpack
  * License: GPL-2.0-or-later
  * Text Domain: video-offload-videopress
@@ -12,7 +12,7 @@ namespace VideoOffloadVideoPress;
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'VOV_VERSION', '1.4.7' );
+define( 'VOV_VERSION', '1.4.8' );
 define( 'VOV_PLUGIN_FILE', __FILE__ );
 define( 'VOV_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'VOV_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -21,6 +21,10 @@ require_once VOV_PLUGIN_DIR . 'includes/class-videopress-api.php';
 require_once VOV_PLUGIN_DIR . 'includes/class-offloader.php';
 require_once VOV_PLUGIN_DIR . 'includes/class-content-replacer.php';
 require_once VOV_PLUGIN_DIR . 'includes/class-admin.php';
+
+if ( defined( 'WP_CLI' ) && WP_CLI ) {
+	require_once VOV_PLUGIN_DIR . 'includes/class-cli.php';
+}
 
 add_action( 'plugins_loaded', function () {
 	if ( ! class_exists( 'Jetpack' ) ) {
