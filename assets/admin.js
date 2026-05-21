@@ -41,7 +41,7 @@ jQuery( function ( $ ) {
 
 		function updateBar() {
 			if ( ! fileSize ) { return; }
-			const tau     = Math.max( 5, fileSize / 15000000 );
+			const tau     = Math.max( 5, fileSize / 30000000 );
 			const elapsed = ( Date.now() - animStart ) / 1000;
 			const display = Math.max( Math.round( fileSize * ( 1 - Math.exp( -elapsed / tau ) ) ), lastDisplay );
 			lastDisplay   = display;
@@ -117,7 +117,7 @@ jQuery( function ( $ ) {
 
 		function updateBar() {
 			if ( ! fileSize ) { return; }
-			const tau     = Math.max( 5, fileSize / 15000000 );
+			const tau     = Math.max( 5, fileSize / 30000000 );
 			const elapsed = ( Date.now() - animStart ) / 1000;
 			const display = Math.max( Math.round( fileSize * ( 1 - Math.exp( -elapsed / tau ) ) ), lastDisplay );
 			lastDisplay   = display;
@@ -313,7 +313,7 @@ jQuery( function ( $ ) {
 			function updateCurrentBar() {
 				if ( ! fileSize ) { return; }
 				$currentFileProgress.removeAttr( 'hidden' );
-				const tau     = Math.max( 5, fileSize / 15000000 );
+				const tau     = Math.max( 5, fileSize / 30000000 );
 				const elapsed = ( Date.now() - animStart ) / 1000;
 				const display = Math.max( Math.round( fileSize * ( 1 - Math.exp( -elapsed / tau ) ) ), lastDisplay );
 				lastDisplay   = display;
