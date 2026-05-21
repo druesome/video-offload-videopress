@@ -33,9 +33,9 @@ class Admin {
 			array( self::class, 'render_admin_page' )
 		);
 		add_submenu_page(
-			'upload.php',
-			__( 'VideoPress Offload Settings', 'video-offload-videopress' ),
-			__( 'VideoPress Offload Settings', 'video-offload-videopress' ),
+			'options-general.php',
+			__( 'Video Offload', 'video-offload-videopress' ),
+			__( 'Video Offload', 'video-offload-videopress' ),
 			'manage_options',
 			'video-offload-videopress-settings',
 			array( self::class, 'render_settings_page' )
@@ -78,7 +78,7 @@ class Admin {
 		<div class="wrap">
 			<h1 class="vov-page-title">
 				<img src="<?php echo esc_url( VOV_PLUGIN_URL . 'assets/vp-logo.png' ); ?>" alt="" class="vov-page-title__logo" width="28" height="28" aria-hidden="true">
-				<?php esc_html_e( 'VideoPress Offload Settings', 'video-offload-videopress' ); ?>
+				<?php esc_html_e( 'Video Offload', 'video-offload-videopress' ); ?>
 			</h1>
 			<form method="post" action="options.php">
 				<?php
@@ -92,7 +92,7 @@ class Admin {
 	}
 
 	public static function enqueue_assets( string $hook ): void {
-		$allowed_hooks = array( 'media_page_video-offload-videopress', 'media_page_video-offload-videopress-settings', 'upload.php', 'post.php', 'post-new.php' );
+		$allowed_hooks = array( 'media_page_video-offload-videopress', 'settings_page_video-offload-videopress-settings', 'upload.php', 'post.php', 'post-new.php' );
 
 		if ( ! in_array( $hook, $allowed_hooks, true ) ) {
 			return;
@@ -160,7 +160,7 @@ class Admin {
 
 			if ( $local_ids && ! get_post_meta( $local_ids[0], Offloader::DELETED_META, true ) ) {
 				$url = admin_url( 'upload.php?post_type=attachment&vov_pair=' . $post_id . ',' . $local_ids[0] );
-				echo '<a href="' . esc_url( $url ) . '" class="vov-pair-link">' . esc_html__( 'Show local video', 'video-offload-videopress' ) . '</a>';
+				echo '<a href="' . esc_url( $url ) . '" class="vov-pair-link">' . esc_html__( '↩ Original local file', 'video-offload-videopress' ) . '</a>';
 			}
 
 			return;
@@ -425,7 +425,7 @@ class Admin {
 			</details>
 
 			<p class="vov-settings-link">
-				<a href="<?php echo esc_url( admin_url( 'upload.php?page=video-offload-videopress-settings' ) ); ?>">
+				<a href="<?php echo esc_url( admin_url( 'options-general.php?page=video-offload-videopress-settings' ) ); ?>">
 					<?php esc_html_e( 'Settings', 'video-offload-videopress' ); ?>
 				</a>
 			</p>
