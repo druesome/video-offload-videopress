@@ -42,7 +42,7 @@ jQuery( function ( $ ) {
 		function updateBar() {
 			if ( ! fileSize ) { return; }
 			const elapsed   = ( Date.now() - animStart ) / 1000;
-			const simulated = Math.round( fileSize * 0.90 * ( 1 - Math.exp( -elapsed / 15 ) ) );
+			const simulated = Math.round( fileSize * 0.90 * ( 1 - Math.exp( -elapsed / 5 ) ) );
 			const display   = Math.max( realBytes, simulated );
 			const pct       = Math.round( display / fileSize * 100 );
 			$loading.find( '.vov-file-progress' ).attr( 'max', fileSize ).val( display );
@@ -115,7 +115,7 @@ jQuery( function ( $ ) {
 		function updateBar() {
 			if ( ! fileSize ) { return; }
 			const elapsed   = ( Date.now() - animStart ) / 1000;
-			const simulated = Math.round( fileSize * 0.90 * ( 1 - Math.exp( -elapsed / 15 ) ) );
+			const simulated = Math.round( fileSize * 0.90 * ( 1 - Math.exp( -elapsed / 5 ) ) );
 			const display   = Math.max( realBytes, simulated );
 			const pct       = Math.round( display / fileSize * 100 );
 			$msg.find( '.vov-file-progress' ).attr( 'max', fileSize ).val( display );
