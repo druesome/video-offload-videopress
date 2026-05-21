@@ -26,7 +26,8 @@ jQuery( function ( $ ) {
 		$btn.hide();
 		$cell.find( '.vov-badge' ).attr( 'class', 'vov-badge vov-badge--uploading' ).text( strings.offloading );
 
-		const $loading = $( '<div class="vov-uploading-msg"><span class="vov-spinner"></span><progress class="vov-file-progress" value="0" max="100" hidden></progress><span class="vov-file-progress-pct" hidden></span></div>' );
+		// Show progress bar immediately (indeterminate); upgrade to determinate when bytes arrive.
+		const $loading = $( '<div class="vov-uploading-msg"><progress class="vov-file-progress"></progress><span class="vov-file-progress-pct" hidden></span></div>' );
 		$btn.after( $loading );
 
 		// Poll for byte-level progress while vov_offload_video runs server-side.
@@ -37,8 +38,7 @@ jQuery( function ( $ ) {
 				.done( function ( res ) {
 					if ( res.success && res.data && res.data.file_size > 0 ) {
 						const pct = Math.round( res.data.bytes_uploaded / res.data.file_size * 100 );
-						$loading.find( '.vov-spinner' ).hide();
-						$loading.find( '.vov-file-progress' ).removeAttr( 'hidden' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
+						$loading.find( '.vov-file-progress' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
 						$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
 					}
 				} )
