@@ -136,7 +136,8 @@ jQuery( function ( $ ) {
 		}
 
 		function autoPoll( polls ) {
-			if ( polls >= 120 ) { clearInterval( animTimer ); return; }
+			// Give up after 4 hours — enough for multi-GB files on slow connections.
+			if ( polls >= 4800 ) { clearInterval( animTimer ); return; }
 			setTimeout( function () {
 				request( 'vov_get_status', { attachment_id: id } )
 					.done( function ( res ) {
