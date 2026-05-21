@@ -26,14 +26,12 @@ jQuery( function ( $ ) {
 		$btn.hide();
 		$cell.find( '.vov-badge' ).attr( 'class', 'vov-badge vov-badge--uploading' ).text( strings.offloading );
 
-		const animStart  = Date.now();
-		let fileSize     = parseInt( $btn.data( 'file-size' ) || '0', 10 );
-		let realBytes    = 0;
-		let lastDisplay  = 0;
-		let lastPollTime = animStart;
-		let uploadRate   = 0; // bytes per ms
-		let animTimer    = null;
-		let pollTimer    = null;
+		const animStart = Date.now();
+		let fileSize    = parseInt( $btn.data( 'file-size' ) || '0', 10 );
+		let realBytes   = 0;
+		let lastDisplay = 0;
+		let animTimer   = null;
+		let pollTimer   = null;
 
 		// If file size is known from the button attribute, show a determinate bar
 		// right away — no spinner, no waiting for a poll.
@@ -44,25 +42,15 @@ jQuery( function ( $ ) {
 
 		function updateBar() {
 			if ( ! fileSize ) { return; }
-			// All bytes delivered — VideoPress is assigning the GUID.
-			if ( realBytes >= fileSize ) {
-				$loading.find( '.vov-file-progress' ).removeAttr( 'value' );
-				$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( 'Finalizing…' );
-				return;
-			}
-			let candidate;
-			if ( realBytes > 0 ) {
-				// Project forward at the observed upload rate between polls.
-				const projected = realBytes + uploadRate * ( Date.now() - lastPollTime );
-				candidate = Math.min( Math.round( projected ), fileSize - 1 );
-			} else {
-				// Slow simulation (up to 15%) while waiting for first real chunk.
-				const elapsed = ( Date.now() - animStart ) / 1000;
-				candidate = Math.round( fileSize * 0.15 * ( 1 - Math.exp( -elapsed / 5 ) ) );
-			}
-			const display = Math.max( candidate, lastDisplay );
-			lastDisplay = display;
-			const pct = Math.round( display / fileSize * 100 );
+			// τ scales with file size so large and small files animate at realistic speeds.
+			// Assumes ~5 MB/s server→VideoPress; bar reaches ~78% at the expected upload time.
+			const tau       = Math.max( 5, fileSize / 10000000 );
+			const elapsed   = ( Date.now() - animStart ) / 1000;
+			const simulated = Math.round( fileSize * 0.9 * ( 1 - Math.exp( -elapsed / tau ) ) );
+			const real      = realBytes > 0 ? Math.min( realBytes, Math.round( fileSize * 0.9 ) ) : 0;
+			const display   = Math.max( simulated, real, lastDisplay );
+			lastDisplay     = display;
+			const pct       = Math.round( display / fileSize * 100 );
 			$loading.find( '.vov-file-progress' ).attr( { max: fileSize, value: display } );
 			$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
 		}
@@ -82,19 +70,15 @@ jQuery( function ( $ ) {
 							animTimer = setInterval( updateBar, 250 );
 						}
 						if ( res.data.bytes_uploaded > realBytes ) {
-							const now = Date.now();
-							uploadRate   = ( res.data.bytes_uploaded - realBytes ) / ( now - lastPollTime );
-							lastPollTime = now;
-							realBytes    = res.data.bytes_uploaded;
+							realBytes = res.data.bytes_uploaded;
 						}
-						updateBar();
 					}
 				} )
 				.always( function () {
-					pollTimer = setTimeout( pollProgress, 1000 );
+					pollTimer = setTimeout( pollProgress, 3000 );
 				} );
 		}
-		pollTimer = setTimeout( pollProgress, 1000 );
+		pollTimer = setTimeout( pollProgress, 3000 );
 
 		request( 'vov_offload_video', { attachment_id: id } )
 			.done( function ( res ) {
@@ -132,32 +116,21 @@ jQuery( function ( $ ) {
 		const $msg = $( '<div class="vov-uploading-msg"><progress class="vov-file-progress"></progress><span class="vov-file-progress-pct" hidden></span></div>' );
 		$cell.find( '.vov-uploading-msg' ).replaceWith( $msg );
 
-		const animStart  = Date.now();
-		let fileSize     = 0;
-		let realBytes    = 0;
-		let lastDisplay  = 0;
-		let lastPollTime = animStart;
-		let uploadRate   = 0; // bytes per ms
-		let animTimer    = null;
+		const animStart = Date.now();
+		let fileSize    = 0;
+		let realBytes   = 0;
+		let lastDisplay = 0;
+		let animTimer   = null;
 
 		function updateBar() {
 			if ( ! fileSize ) { return; }
-			if ( realBytes >= fileSize ) {
-				$msg.find( '.vov-file-progress' ).removeAttr( 'value' );
-				$msg.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( 'Finalizing…' );
-				return;
-			}
-			let candidate;
-			if ( realBytes > 0 ) {
-				const projected = realBytes + uploadRate * ( Date.now() - lastPollTime );
-				candidate = Math.min( Math.round( projected ), fileSize - 1 );
-			} else {
-				const elapsed = ( Date.now() - animStart ) / 1000;
-				candidate = Math.round( fileSize * 0.15 * ( 1 - Math.exp( -elapsed / 5 ) ) );
-			}
-			const display = Math.max( candidate, lastDisplay );
-			lastDisplay = display;
-			const pct = Math.round( display / fileSize * 100 );
+			const tau       = Math.max( 5, fileSize / 10000000 );
+			const elapsed   = ( Date.now() - animStart ) / 1000;
+			const simulated = Math.round( fileSize * 0.9 * ( 1 - Math.exp( -elapsed / tau ) ) );
+			const real      = realBytes > 0 ? Math.min( realBytes, Math.round( fileSize * 0.9 ) ) : 0;
+			const display   = Math.max( simulated, real, lastDisplay );
+			lastDisplay     = display;
+			const pct       = Math.round( display / fileSize * 100 );
 			$msg.find( '.vov-file-progress' ).attr( { max: fileSize, value: display } );
 			$msg.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
 		}
@@ -177,10 +150,7 @@ jQuery( function ( $ ) {
 									animTimer = setInterval( updateBar, 250 );
 								}
 								if ( res.data.bytes_uploaded > realBytes ) {
-									const now = Date.now();
-									uploadRate   = ( res.data.bytes_uploaded - realBytes ) / ( now - lastPollTime );
-									lastPollTime = now;
-									realBytes    = res.data.bytes_uploaded;
+									realBytes = res.data.bytes_uploaded;
 								}
 							}
 							updateBar();
@@ -188,7 +158,7 @@ jQuery( function ( $ ) {
 						}
 					} )
 					.fail( function () { autoPoll( polls + 1 ); } );
-			}, 1000 );
+			}, 3000 );
 		}
 		autoPoll( 0 );
 	} );
@@ -348,33 +318,22 @@ jQuery( function ( $ ) {
 		}
 
 		function offloadOne( id ) {
-			const $chk       = $( '.vov-select-video[value="' + id + '"]' );
-			let fileSize      = parseInt( $chk.data( 'file-size' ) || '0', 10 );
-			let realBytes     = 0;
-			let lastDisplay   = 0;
-			const animStart   = Date.now();
-			let lastPollTime  = animStart;
-			let uploadRate    = 0; // bytes per ms
+			const $chk      = $( '.vov-select-video[value="' + id + '"]' );
+			let fileSize     = parseInt( $chk.data( 'file-size' ) || '0', 10 );
+			let realBytes    = 0;
+			let lastDisplay  = 0;
+			const animStart  = Date.now();
 
 			function updateCurrentBar() {
 				if ( ! fileSize ) { return; }
 				$currentFileProgress.removeAttr( 'hidden' );
-				if ( realBytes >= fileSize ) {
-					$currentFileBar.removeAttr( 'value' );
-					$currentFileText.text( 'Finalizing…' );
-					return;
-				}
-				let candidate;
-				if ( realBytes > 0 ) {
-					const projected = realBytes + uploadRate * ( Date.now() - lastPollTime );
-					candidate = Math.min( Math.round( projected ), fileSize - 1 );
-				} else {
-					const elapsed = ( Date.now() - animStart ) / 1000;
-					candidate = Math.round( fileSize * 0.15 * ( 1 - Math.exp( -elapsed / 5 ) ) );
-				}
-				const display = Math.max( candidate, lastDisplay );
-				lastDisplay = display;
-				const pct = Math.round( display / fileSize * 100 );
+				const tau       = Math.max( 5, fileSize / 10000000 );
+				const elapsed   = ( Date.now() - animStart ) / 1000;
+				const simulated = Math.round( fileSize * 0.9 * ( 1 - Math.exp( -elapsed / tau ) ) );
+				const real      = realBytes > 0 ? Math.min( realBytes, Math.round( fileSize * 0.9 ) ) : 0;
+				const display   = Math.max( simulated, real, lastDisplay );
+				lastDisplay     = display;
+				const pct       = Math.round( display / fileSize * 100 );
 				$currentFileBar.attr( { max: fileSize, value: display } );
 				$currentFileText.text( pct + '%' );
 			}
@@ -393,19 +352,15 @@ jQuery( function ( $ ) {
 								currentFileAnim = setInterval( updateCurrentBar, 250 );
 							}
 							if ( res.data.bytes_uploaded > realBytes ) {
-								const now = Date.now();
-								uploadRate   = ( res.data.bytes_uploaded - realBytes ) / ( now - lastPollTime );
-								lastPollTime = now;
-								realBytes    = res.data.bytes_uploaded;
+								realBytes = res.data.bytes_uploaded;
 							}
-							updateCurrentBar();
 						}
 					} )
 					.always( function () {
-						currentFileTimer = setTimeout( pollCurrentFileProgress, 1000 );
+						currentFileTimer = setTimeout( pollCurrentFileProgress, 3000 );
 					} );
 			}
-			currentFileTimer = setTimeout( pollCurrentFileProgress, 1000 );
+			currentFileTimer = setTimeout( pollCurrentFileProgress, 3000 );
 
 			request( 'vov_offload_video', { attachment_id: id } )
 				.done( function () { stopCurrentFileProgress(); onBulkItemDone(); } )
