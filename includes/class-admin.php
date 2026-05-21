@@ -370,6 +370,7 @@ class Admin {
 		$batch_size    = (int) get_option( 'vov_batch_size', 50 );
 		$total         = $ready ? Offloader::count_local_videos() : 0;
 		$videos        = $ready ? Offloader::get_local_videos( 0, $batch_size ) : array();
+		$space_saved   = Offloader::get_space_saved();
 		?>
 		<div class="wrap vov-wrap">
 			<h1 class="vov-page-title">
@@ -431,6 +432,13 @@ class Admin {
 			</p>
 
 			<div class="vov-summary card">
+				<?php if ( $space_saved > 0 ) : ?>
+					<p>
+						<strong><?php esc_html_e( 'Space saved:', 'video-offload-videopress' ); ?></strong>
+						<?php echo esc_html( size_format( $space_saved, 2 ) ); ?>
+					</p>
+				<?php endif; ?>
+
 				<?php if ( $total > 0 ) : ?>
 					<p>
 						<?php printf(

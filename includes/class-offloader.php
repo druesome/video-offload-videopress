@@ -16,6 +16,7 @@ class Offloader {
 	const PROGRESS_META       = '_vov_progress';
 	const UPLOAD_STARTED_META = '_vov_upload_started';
 	const LAST_VERIFIED_META  = '_vov_last_verified';
+	const SAVED_BYTES_OPTION  = 'vov_space_saved_bytes';
 
 	const STATUS_NONE      = 'none';
 	const STATUS_UPLOADING = 'uploading';
@@ -185,9 +186,24 @@ class Offloader {
 			return new \WP_Error( 'not_uploaded', 'The video must be successfully uploaded to VideoPress before deleting the local file.' );
 		}
 
+		// Capture file size before the attachment post and its meta are removed.
+		$meta  = wp_get_attachment_metadata( $attachment_id );
+		$bytes = isset( $meta['filesize'] ) ? (int) $meta['filesize'] : 0;
+		if ( ! $bytes ) {
+			$file  = get_attached_file( $attachment_id );
+			$bytes = ( $file && file_exists( $file ) ) ? (int) filesize( $file ) : 0;
+		}
+		if ( $bytes > 0 ) {
+			update_option( self::SAVED_BYTES_OPTION, self::get_space_saved() + $bytes );
+		}
+
 		wp_delete_attachment( $attachment_id, true );
 
 		return true;
+	}
+
+	public static function get_space_saved(): int {
+		return (int) get_option( self::SAVED_BYTES_OPTION, 0 );
 	}
 
 	public static function get_status( int $attachment_id ): array {
