@@ -504,7 +504,8 @@ class Admin {
 				<tbody>
 					<?php foreach ( $videos as $video ) :
 						$file        = get_attached_file( $video->ID );
-						$file_size   = $file && file_exists( $file ) ? size_format( filesize( $file ) ) : '—';
+						$file_bytes  = $file && file_exists( $file ) ? (int) filesize( $file ) : 0;
+						$file_size   = $file_bytes ? size_format( $file_bytes ) : '—';
 						$mime        = get_post_mime_type( $video->ID );
 						$status_data = Offloader::get_status( $video->ID );
 						$offloadable = in_array( $status_data['status'], array( Offloader::STATUS_NONE, Offloader::STATUS_ERROR ), true );
@@ -512,7 +513,7 @@ class Admin {
 					<tr id="vov-row-<?php echo esc_attr( $video->ID ); ?>">
 						<th class="check-column">
 							<?php if ( $offloadable ) : ?>
-								<input type="checkbox" class="vov-select-video" value="<?php echo esc_attr( $video->ID ); ?>" checked>
+								<input type="checkbox" class="vov-select-video" value="<?php echo esc_attr( $video->ID ); ?>" data-file-size="<?php echo esc_attr( $file_bytes ); ?>" checked>
 							<?php endif; ?>
 						</th>
 						<td class="column-title column-primary">
