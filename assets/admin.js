@@ -26,18 +26,18 @@ jQuery( function ( $ ) {
 		$btn.hide();
 		$cell.find( '.vov-badge' ).attr( 'class', 'vov-badge vov-badge--uploading' ).text( strings.offloading );
 
-		// Show indeterminate bar immediately; switch to determinate once file_size is known.
-		const $loading = $( '<div class="vov-uploading-msg"><span class="vov-spinner"></span><progress class="vov-file-progress"></progress><span class="vov-file-progress-pct" hidden></span></div>' );
-		$btn.after( $loading );
-
-		// Exponential animation: rises quickly at first and levels off near 90 %.
-		// τ = 15 s → ~23 % after 3 s, ~57 % after 15 s, ~78 % after 30 s.
-		// Real bytes_uploaded from VideoPress take precedence when available.
 		const animStart = Date.now();
-		let fileSize    = 0;
+		let fileSize    = parseInt( $btn.data( 'file-size' ) || '0', 10 );
 		let realBytes   = 0;
 		let animTimer   = null;
 		let pollTimer   = null;
+
+		// If file size is known from the button attribute, show a determinate bar
+		// right away — no spinner, no waiting for a poll.
+		const $loading = fileSize > 0
+			? $( '<div class="vov-uploading-msg"><progress class="vov-file-progress"></progress><span class="vov-file-progress-pct" hidden></span></div>' )
+			: $( '<div class="vov-uploading-msg"><span class="vov-spinner"></span><progress class="vov-file-progress"></progress><span class="vov-file-progress-pct" hidden></span></div>' );
+		$btn.after( $loading );
 
 		function updateBar() {
 			if ( ! fileSize ) { return; }
@@ -47,6 +47,11 @@ jQuery( function ( $ ) {
 			const pct       = Math.round( display / fileSize * 100 );
 			$loading.find( '.vov-file-progress' ).attr( 'max', fileSize ).val( display );
 			$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
+		}
+
+		if ( fileSize > 0 ) {
+			animTimer = setInterval( updateBar, 250 );
+			updateBar();
 		}
 
 		function pollProgress() {
@@ -68,8 +73,7 @@ jQuery( function ( $ ) {
 					pollTimer = setTimeout( pollProgress, 3000 );
 				} );
 		}
-		// First poll at 1 s so the bar goes determinate as quickly as possible.
-		pollTimer = setTimeout( pollProgress, 1000 );
+		pollTimer = setTimeout( pollProgress, 3000 );
 
 		request( 'vov_offload_video', { attachment_id: id } )
 			.done( function ( res ) {

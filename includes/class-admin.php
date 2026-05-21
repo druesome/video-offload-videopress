@@ -234,6 +234,18 @@ class Admin {
 		$started  = (int) get_post_meta( $attachment_id, Offloader::UPLOAD_STARTED_META, true );
 		$is_fresh = $started && $started > time() - 30 * MINUTE_IN_SECONDS;
 
+		$file_bytes = 0;
+		$_meta      = wp_get_attachment_metadata( $attachment_id );
+		if ( isset( $_meta['filesize'] ) ) {
+			$file_bytes = (int) $_meta['filesize'];
+		}
+		if ( ! $file_bytes ) {
+			$_path = get_attached_file( $attachment_id );
+			if ( $_path && file_exists( $_path ) ) {
+				$file_bytes = (int) filesize( $_path );
+			}
+		}
+
 		$extra = '';
 		if ( Offloader::STATUS_UPLOADING === $status && $is_fresh ) {
 			$extra .= ' data-auto-poll="1"';
@@ -256,8 +268,9 @@ class Admin {
 					// Timestamp is old or missing — the previous attempt died.
 					echo '<span class="vov-badge vov-badge--uploading">' . esc_html__( 'Stuck', 'video-offload-videopress' ) . '</span>';
 					printf(
-						'<button type="button" class="button button-small vov-btn-offload" data-id="%s">%s</button>',
+						'<button type="button" class="button button-small vov-btn-offload" data-id="%s" data-file-size="%s">%s</button>',
 						$id,
+						esc_attr( $file_bytes ),
 						esc_html__( 'Retry', 'video-offload-videopress' )
 					);
 				}
@@ -304,8 +317,9 @@ class Admin {
 					echo '<p class="vov-error-msg">' . esc_html( $s['error'] ) . '</p>';
 				}
 				printf(
-					'<button type="button" class="button button-small vov-btn-offload" data-id="%s">%s</button>',
+					'<button type="button" class="button button-small vov-btn-offload" data-id="%s" data-file-size="%s">%s</button>',
 					$id,
+					esc_attr( $file_bytes ),
 					esc_html__( 'Retry', 'video-offload-videopress' )
 				);
 				break;
@@ -313,8 +327,9 @@ class Admin {
 			default: // none / empty
 				echo '<span class="vov-badge vov-badge--local">' . esc_html__( 'Local only', 'video-offload-videopress' ) . '</span>';
 				printf(
-					'<button type="button" class="button button-small vov-btn-offload" data-id="%s">%s</button>',
+					'<button type="button" class="button button-small vov-btn-offload" data-id="%s" data-file-size="%s">%s</button>',
 					$id,
+					esc_attr( $file_bytes ),
 					esc_html__( 'Offload to VideoPress', 'video-offload-videopress' )
 				);
 				break;
