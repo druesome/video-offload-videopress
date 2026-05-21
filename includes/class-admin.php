@@ -465,6 +465,10 @@ class Admin {
 						<progress id="vov-progress-bar" value="0"></progress>
 						<span id="vov-progress-text"></span>
 					</div>
+					<div id="vov-current-file-progress" hidden>
+						<progress id="vov-current-file-bar" value="0" max="100"></progress>
+						<span id="vov-current-file-text"></span>
+					</div>
 				<?php else : ?>
 					<p><?php esc_html_e( 'All videos in your media library have been offloaded to VideoPress.', 'video-offload-videopress' ); ?></p>
 				<?php endif; ?>
