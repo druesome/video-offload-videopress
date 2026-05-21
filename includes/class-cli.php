@@ -169,6 +169,18 @@ class CLI {
 		if ( (int) get_option( 'blog_public' ) === -1 ) {
 			\WP_CLI::error( 'This site is set to private. VideoPress cannot fetch videos from a private site.' );
 		}
+
+		// The VideoPress REST endpoint requires a current user with upload permissions.
+		// In CLI context get_current_user_id() returns 0, so find a connected user.
+		if ( ! get_current_user_id() ) {
+			$user_tokens = \Jetpack_Options::get_option( 'user_tokens', array() );
+			if ( ! empty( $user_tokens ) ) {
+				wp_set_current_user( (int) key( $user_tokens ) );
+				\WP_CLI::debug( 'Set current user to ID ' . get_current_user_id() . ' for VideoPress API calls.', 'vov' );
+			} else {
+				\WP_CLI::warning( 'No connected WordPress.com user found. If the upload fails, try running with --user=<id> using an admin user connected to WordPress.com.' );
+			}
+		}
 	}
 }
 
