@@ -44,8 +44,8 @@ jQuery( function ( $ ) {
 			if ( ! fileSize ) { return; }
 			const tau       = Math.max( 5, fileSize / 15000000 );
 			const elapsed   = ( Date.now() - animStart ) / 1000;
-			const simulated = Math.round( fileSize * 0.99 * ( 1 - Math.exp( -elapsed / tau ) ) );
-			const real      = realBytes > 0 ? Math.min( realBytes, Math.round( fileSize * 0.99 ) ) : 0;
+			const simulated = Math.round( fileSize * ( 1 - Math.exp( -elapsed / tau ) ) );
+			const real      = realBytes > 0 ? Math.min( realBytes, Math.round( fileSize ) ) : 0;
 			const display   = Math.max( simulated, real, lastDisplay );
 			lastDisplay     = display;
 			const pct       = Math.round( display / fileSize * 100 );
@@ -87,7 +87,7 @@ jQuery( function ( $ ) {
 						$loading.find( '.vov-file-progress' ).attr( { max: fileSize, value: fileSize } );
 						$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( '100%' );
 					}
-					setTimeout( () => location.reload(), 400 );
+					location.reload();
 				} else {
 					$loading.remove();
 					$btn.show();
@@ -128,8 +128,8 @@ jQuery( function ( $ ) {
 			if ( ! fileSize ) { return; }
 			const tau       = Math.max( 5, fileSize / 15000000 );
 			const elapsed   = ( Date.now() - animStart ) / 1000;
-			const simulated = Math.round( fileSize * 0.99 * ( 1 - Math.exp( -elapsed / tau ) ) );
-			const real      = realBytes > 0 ? Math.min( realBytes, Math.round( fileSize * 0.99 ) ) : 0;
+			const simulated = Math.round( fileSize * ( 1 - Math.exp( -elapsed / tau ) ) );
+			const real      = realBytes > 0 ? Math.min( realBytes, Math.round( fileSize ) ) : 0;
 			const display   = Math.max( simulated, real, lastDisplay );
 			lastDisplay     = display;
 			const pct       = Math.round( display / fileSize * 100 );
@@ -149,7 +149,7 @@ jQuery( function ( $ ) {
 								$msg.find( '.vov-file-progress' ).attr( { max: fileSize, value: fileSize } );
 								$msg.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( '100%' );
 							}
-							setTimeout( () => location.reload(), 400 );
+							location.reload();
 						} else if ( res.success && res.data.status === 'error' ) {
 							clearInterval( animTimer );
 							location.reload();
@@ -339,8 +339,8 @@ jQuery( function ( $ ) {
 				$currentFileProgress.removeAttr( 'hidden' );
 				const tau       = Math.max( 5, fileSize / 15000000 );
 				const elapsed   = ( Date.now() - animStart ) / 1000;
-				const simulated = Math.round( fileSize * 0.99 * ( 1 - Math.exp( -elapsed / tau ) ) );
-				const real      = realBytes > 0 ? Math.min( realBytes, Math.round( fileSize * 0.99 ) ) : 0;
+				const simulated = Math.round( fileSize * ( 1 - Math.exp( -elapsed / tau ) ) );
+				const real      = realBytes > 0 ? Math.min( realBytes, Math.round( fileSize ) ) : 0;
 				const display   = Math.max( simulated, real, lastDisplay );
 				lastDisplay     = display;
 				const pct       = Math.round( display / fileSize * 100 );
@@ -378,7 +378,7 @@ jQuery( function ( $ ) {
 						$currentFileBar.attr( { max: fileSize, value: fileSize } );
 						$currentFileText.text( '100%' );
 					}
-					setTimeout( function () { stopCurrentFileProgress(); onBulkItemDone(); }, 400 );
+					stopCurrentFileProgress(); onBulkItemDone();
 				} )
 				.fail( function () { stopCurrentFileProgress(); pollOne( id, 0 ); } );
 		}
