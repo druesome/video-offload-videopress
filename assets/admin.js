@@ -104,22 +104,42 @@ jQuery( function ( $ ) {
 	// Replace in Content
 	// -------------------------------------------------------------------------
 	$( document ).on( 'click', '.vov-btn-replace', function () {
-		if ( ! window.confirm( strings.confirmReplace ) ) { return; }
-
 		const $btn  = $( this );
 		const id    = $btn.data( 'id' );
 		const $cell = $btn.closest( '.vov-status-cell' );
 
-		$btn.prop( 'disabled', true ).text( strings.replacing );
+		$btn.prop( 'disabled', true ).text( '…' );
 
-		request( 'vov_replace_content', { attachment_id: id } )
+		// First find how many posts reference this video, then confirm.
+		request( 'vov_find_in_content', { attachment_id: id } )
 			.done( function ( res ) {
-				if ( res.success ) {
-					location.reload();
-				} else {
+				if ( ! res.success ) {
 					$btn.prop( 'disabled', false ).text( 'Replace in Content' );
-					$( '<p class="vov-error-msg">' ).text( strings.error + ( res.data || '' ) ).insertAfter( $btn );
+					return;
 				}
+
+				const count = res.data.posts.length;
+				const msg   = count === 0
+					? 'This video was not found in any post content. Nothing will be updated.'
+					: 'This will update ' + count + ' ' + ( count === 1 ? 'post' : 'posts' ) + ' to use the VideoPress embed instead of the local video URL. This action cannot be undone.';
+
+				if ( ! window.confirm( msg ) ) {
+					$btn.prop( 'disabled', false ).text( 'Replace in Content' );
+					return;
+				}
+
+				$btn.text( strings.replacing );
+
+				request( 'vov_replace_content', { attachment_id: id } )
+					.done( function ( res ) {
+						if ( res.success ) {
+							location.reload();
+						} else {
+							$btn.prop( 'disabled', false ).text( 'Replace in Content' );
+							$( '<p class="vov-error-msg">' ).text( strings.error + ( res.data || '' ) ).insertAfter( $btn );
+						}
+					} )
+					.fail( function () { $btn.prop( 'disabled', false ).text( 'Replace in Content' ); } );
 			} )
 			.fail( function () { $btn.prop( 'disabled', false ).text( 'Replace in Content' ); } );
 	} );
