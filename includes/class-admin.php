@@ -249,18 +249,25 @@ class Admin {
 			case Offloader::STATUS_UPLOADING:
 				if ( $is_fresh ) {
 					// Upload is in progress (e.g. user refreshed mid-upload).
-					// Pre-populate progress from last saved chunk; JS poll updates it.
-					$progress      = get_post_meta( $attachment_id, Offloader::PROGRESS_META, true );
-					$bytes_done    = isset( $progress['bytes_uploaded'] ) ? (int) $progress['bytes_uploaded'] : 0;
-					$bytes_total   = isset( $progress['file_size'] )      ? (int) $progress['file_size']      : 0;
-					$has_progress  = $bytes_total > 0;
-					$pct           = $has_progress ? (int) round( $bytes_done / $bytes_total * 100 ) : 0;
+					// Always render a visible progress bar: determinate if we have
+					// byte data from PROGRESS_META, indeterminate (no value attr)
+					// otherwise. JS autoPoll upgrades to determinate as bytes arrive.
+					$progress   = get_post_meta( $attachment_id, Offloader::PROGRESS_META, true );
+					$bytes_done = isset( $progress['bytes_uploaded'] ) ? (int) $progress['bytes_uploaded'] : 0;
+					$bytes_total = isset( $progress['file_size'] )     ? (int) $progress['file_size']      : 0;
+					$has_bytes  = $bytes_total > 0;
+					$pct        = $has_bytes ? (int) round( $bytes_done / $bytes_total * 100 ) : 0;
 
 					echo '<span class="vov-badge vov-badge--uploading">' . esc_html__( 'Uploading…', 'video-offload-videopress' ) . '</span>';
 					echo '<div class="vov-uploading-msg">';
-					echo '<span class="vov-spinner"' . ( $has_progress ? ' hidden' : '' ) . '></span>';
-					echo '<progress class="vov-file-progress" value="' . esc_attr( $bytes_done ) . '" max="' . esc_attr( $bytes_total ?: 100 ) . '"' . ( $has_progress ? '' : ' hidden' ) . '></progress>';
-					echo '<span class="vov-file-progress-pct"' . ( $has_progress ? '' : ' hidden' ) . '>' . esc_html( $pct . '%' ) . '</span>';
+					if ( $has_bytes ) {
+						echo '<progress class="vov-file-progress" value="' . esc_attr( $bytes_done ) . '" max="' . esc_attr( $bytes_total ) . '"></progress>';
+						echo '<span class="vov-file-progress-pct">' . esc_html( $pct . '%' ) . '</span>';
+					} else {
+						// No byte data yet — render indeterminate bar; JS upgrades it.
+						echo '<progress class="vov-file-progress"></progress>';
+						echo '<span class="vov-file-progress-pct" hidden></span>';
+					}
 					echo '</div>';
 				} else {
 					// Timestamp is old or missing — the previous attempt died.

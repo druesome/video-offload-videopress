@@ -88,8 +88,7 @@ jQuery( function ( $ ) {
 						} else {
 							if ( res.data && res.data.file_size > 0 ) {
 								const pct = Math.round( res.data.bytes_uploaded / res.data.file_size * 100 );
-								$cell.find( '.vov-spinner' ).hide();
-								$cell.find( '.vov-file-progress' ).removeAttr( 'hidden' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
+								$cell.find( '.vov-file-progress' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
 								$cell.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
 							}
 							autoPoll( polls + 1 );
