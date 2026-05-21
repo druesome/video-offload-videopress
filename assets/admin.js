@@ -29,6 +29,7 @@ jQuery( function ( $ ) {
 		const animStart = Date.now();
 		let fileSize    = parseInt( $btn.data( 'file-size' ) || '0', 10 );
 		let realBytes   = 0;
+		let lastDisplay = 0;
 		let animTimer   = null;
 		let pollTimer   = null;
 
@@ -41,10 +42,17 @@ jQuery( function ( $ ) {
 
 		function updateBar() {
 			if ( ! fileSize ) { return; }
-			const elapsed   = ( Date.now() - animStart ) / 1000;
-			const simulated = Math.round( fileSize * 0.90 * ( 1 - Math.exp( -elapsed / 5 ) ) );
-			const display   = Math.max( realBytes, simulated );
-			const pct       = Math.round( display / fileSize * 100 );
+			const max95 = Math.round( fileSize * 0.95 );
+			let candidate;
+			if ( realBytes > 0 ) {
+				candidate = Math.min( realBytes, max95 );
+			} else {
+				const elapsed = ( Date.now() - animStart ) / 1000;
+				candidate = Math.round( fileSize * 0.15 * ( 1 - Math.exp( -elapsed / 5 ) ) );
+			}
+			const display = Math.max( candidate, lastDisplay );
+			lastDisplay = display;
+			const pct = Math.round( display / fileSize * 100 );
 			$loading.find( '.vov-file-progress' ).attr( 'max', fileSize ).val( display );
 			$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
 		}
@@ -114,14 +122,22 @@ jQuery( function ( $ ) {
 		const animStart  = Date.now();
 		let fileSize     = 0;
 		let realBytes    = 0;
+		let lastDisplay  = 0;
 		let animTimer    = null;
 
 		function updateBar() {
 			if ( ! fileSize ) { return; }
-			const elapsed   = ( Date.now() - animStart ) / 1000;
-			const simulated = Math.round( fileSize * 0.90 * ( 1 - Math.exp( -elapsed / 5 ) ) );
-			const display   = Math.max( realBytes, simulated );
-			const pct       = Math.round( display / fileSize * 100 );
+			const max95 = Math.round( fileSize * 0.95 );
+			let candidate;
+			if ( realBytes > 0 ) {
+				candidate = Math.min( realBytes, max95 );
+			} else {
+				const elapsed = ( Date.now() - animStart ) / 1000;
+				candidate = Math.round( fileSize * 0.15 * ( 1 - Math.exp( -elapsed / 5 ) ) );
+			}
+			const display = Math.max( candidate, lastDisplay );
+			lastDisplay = display;
+			const pct = Math.round( display / fileSize * 100 );
 			$msg.find( '.vov-file-progress' ).attr( 'max', fileSize ).val( display );
 			$msg.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
 		}
@@ -312,14 +328,22 @@ jQuery( function ( $ ) {
 			const $chk      = $( '.vov-select-video[value="' + id + '"]' );
 			let fileSize     = parseInt( $chk.data( 'file-size' ) || '0', 10 );
 			let realBytes    = 0;
+			let lastDisplay  = 0;
 			const animStart  = Date.now();
 
 			function updateCurrentBar() {
 				if ( ! fileSize ) { return; }
-				const elapsed   = ( Date.now() - animStart ) / 1000;
-				const simulated = Math.round( fileSize * 0.90 * ( 1 - Math.exp( -elapsed / 5 ) ) );
-				const display   = Math.max( realBytes, simulated );
-				const pct       = Math.round( display / fileSize * 100 );
+				const max95 = Math.round( fileSize * 0.95 );
+				let candidate;
+				if ( realBytes > 0 ) {
+					candidate = Math.min( realBytes, max95 );
+				} else {
+					const elapsed = ( Date.now() - animStart ) / 1000;
+					candidate = Math.round( fileSize * 0.15 * ( 1 - Math.exp( -elapsed / 5 ) ) );
+				}
+				const display = Math.max( candidate, lastDisplay );
+				lastDisplay = display;
+				const pct = Math.round( display / fileSize * 100 );
 				$currentFileBar.attr( 'max', fileSize ).val( display );
 				$currentFileText.text( pct + '%' );
 				$currentFileProgress.removeAttr( 'hidden' );
