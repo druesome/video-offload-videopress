@@ -249,26 +249,9 @@ class Admin {
 			case Offloader::STATUS_UPLOADING:
 				if ( $is_fresh ) {
 					// Upload is in progress (e.g. user refreshed mid-upload).
-					// Always render a visible progress bar: determinate if we have
-					// byte data from PROGRESS_META, indeterminate (no value attr)
-					// otherwise. JS autoPoll upgrades to determinate as bytes arrive.
-					$progress   = get_post_meta( $attachment_id, Offloader::PROGRESS_META, true );
-					$bytes_done = isset( $progress['bytes_uploaded'] ) ? (int) $progress['bytes_uploaded'] : 0;
-					$bytes_total = isset( $progress['file_size'] )     ? (int) $progress['file_size']      : 0;
-					$has_bytes  = $bytes_total > 0;
-					$pct        = $has_bytes ? (int) round( $bytes_done / $bytes_total * 100 ) : 0;
-
+					// JS will auto-poll this cell until complete.
 					echo '<span class="vov-badge vov-badge--uploading">' . esc_html__( 'Uploading…', 'video-offload-videopress' ) . '</span>';
-					echo '<div class="vov-uploading-msg">';
-					if ( $has_bytes ) {
-						echo '<progress class="vov-file-progress" value="' . esc_attr( $bytes_done ) . '" max="' . esc_attr( $bytes_total ) . '"></progress>';
-						echo '<span class="vov-file-progress-pct">' . esc_html( $pct . '%' ) . '</span>';
-					} else {
-						// No byte data yet — render indeterminate bar; JS upgrades it.
-						echo '<progress class="vov-file-progress"></progress>';
-						echo '<span class="vov-file-progress-pct" hidden></span>';
-					}
-					echo '</div>';
+					echo '<span class="vov-uploading-msg"><span class="vov-spinner"></span>' . esc_html__( 'Offloading, please wait…', 'video-offload-videopress' ) . '</span>';
 				} else {
 					// Timestamp is old or missing — the previous attempt died.
 					echo '<span class="vov-badge vov-badge--uploading">' . esc_html__( 'Stuck', 'video-offload-videopress' ) . '</span>';

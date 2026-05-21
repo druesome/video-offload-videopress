@@ -74,36 +74,32 @@ jQuery( function ( $ ) {
 	// -------------------------------------------------------------------------
 	// Auto-poll uploading cells on page load
 	// -------------------------------------------------------------------------
-	var $autopollCells = $( '.vov-status-cell[data-auto-poll]' );
-	console.log( '[VOV 1.5.10] auto-poll cells found:', $autopollCells.length );
-
-	$autopollCells.each( function () {
+	$( '.vov-status-cell[data-auto-poll]' ).each( function () {
 		const $cell = $( this );
 		const id    = $cell.data( 'attachment-id' );
-		console.log( '[VOV 1.5.10] starting auto-poll for attachment id:', id );
-		console.log( '[VOV 1.5.10] cell HTML:', $cell[0].outerHTML );
+
+		// Replace the PHP-rendered spinner with a progress bar immediately.
+		// Indeterminate (no value attr) until bytes arrive from vov_get_status.
+		const $msg = $( '<div class="vov-uploading-msg"><progress class="vov-file-progress"></progress><span class="vov-file-progress-pct" hidden></span></div>' );
+		$cell.find( '.vov-uploading-msg' ).replaceWith( $msg );
 
 		function autoPoll( polls ) {
 			if ( polls >= 40 ) { return; }
 			setTimeout( function () {
 				request( 'vov_get_status', { attachment_id: id } )
 					.done( function ( res ) {
-						console.log( '[VOV 1.5.10] poll', polls, 'response:', JSON.stringify( res ) );
 						if ( res.success && ( res.data.status === 'uploaded' || res.data.status === 'error' ) ) {
 							location.reload();
 						} else {
 							if ( res.data && res.data.file_size > 0 ) {
 								const pct = Math.round( res.data.bytes_uploaded / res.data.file_size * 100 );
-								$cell.find( '.vov-file-progress' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
-								$cell.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
+								$msg.find( '.vov-file-progress' ).attr( 'max', res.data.file_size ).val( res.data.bytes_uploaded );
+								$msg.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( pct + '%' );
 							}
 							autoPoll( polls + 1 );
 						}
 					} )
-					.fail( function ( jqXHR ) {
-						console.log( '[VOV 1.5.10] poll', polls, 'FAILED status:', jqXHR.status, 'body:', jqXHR.responseText );
-						autoPoll( polls + 1 );
-					} );
+					.fail( function () { autoPoll( polls + 1 ); } );
 			}, 3000 );
 		}
 		autoPoll( 0 );
