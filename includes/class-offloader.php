@@ -258,6 +258,7 @@ class Offloader {
 					$upload_key    = '';
 					$retried_fresh = true;
 					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+					VideoPress_API::clear_upload_cache( $attachment_id );
 					sleep( 2 );
 					continue;
 				}
@@ -488,6 +489,7 @@ class Offloader {
 						$had_active_chunk = false;
 						$retried_fresh    = true;
 						delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+						VideoPress_API::clear_upload_cache( $attachment_id );
 						sleep( 2 );
 						continue;
 					}
@@ -513,6 +515,7 @@ class Offloader {
 					$upload_key    = '';
 					$retried_fresh = true;
 					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+					VideoPress_API::clear_upload_cache( $attachment_id );
 					sleep( 2 );
 					continue;
 				}

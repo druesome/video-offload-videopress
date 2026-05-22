@@ -17,6 +17,15 @@ class VideoPress_API {
 		return (int) \Jetpack_Options::get_option( 'id' );
 	}
 
+	/**
+	 * Delete Jetpack's tus session transient for an attachment so the next upload
+	 * call creates a brand-new session instead of resuming a stale/expired one.
+	 * Jetpack keys the transient as "s-{site_id}-v-{attachment_id}".
+	 */
+	public static function clear_upload_cache( int $attachment_id ): void {
+		delete_transient( sprintf( 's-%d-v-%d', self::get_blog_id(), $attachment_id ) );
+	}
+
 	public static function is_connected(): bool {
 		return self::get_blog_id() > 0 && \Jetpack::is_connection_ready();
 	}
