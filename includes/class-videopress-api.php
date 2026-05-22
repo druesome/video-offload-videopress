@@ -161,9 +161,11 @@ class VideoPress_API {
 				&& false !== stripos( $message, 'attachment_id' )
 			) {
 				$file_path = get_attached_file( $attachment_id );
-				$message   = $file_path && file_exists( $file_path )
-					? 'VideoPress could not read the local file. Check that the file is readable by the web server (permissions, path).'
-					: 'VideoPress could not find the local file. It may have been moved or deleted.';
+				if ( $file_path && file_exists( $file_path ) ) {
+					$message = sprintf( 'VideoPress could not read the local file (path: %s). Check file permissions.', $file_path );
+				} else {
+					$message = sprintf( 'VideoPress could not find the local file (path: %s).', $file_path ?: 'unknown' );
+				}
 			} else {
 				$message = sprintf( '[%d] %s', $response->get_status(), $message );
 			}
