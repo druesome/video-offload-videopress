@@ -154,11 +154,20 @@ class VideoPress_API {
 		remove_filter( 'http_request_args', $bump_timeout, 999 );
 
 		if ( $response->is_error() ) {
-			$error = $response->as_error();
-			return new \WP_Error(
-				$error->get_error_code(),
-				sprintf( '[%d] %s', $response->get_status(), $error->get_error_message() )
-			);
+			$error   = $response->as_error();
+			$message = $error->get_error_message();
+			if (
+				400 === $response->get_status()
+				&& false !== stripos( $message, 'attachment_id' )
+			) {
+				$file_path = get_attached_file( $attachment_id );
+				$message   = $file_path && file_exists( $file_path )
+					? 'VideoPress could not read the local file. Check that the file is readable by the web server (permissions, path).'
+					: 'VideoPress could not find the local file. It may have been moved or deleted.';
+			} else {
+				$message = sprintf( '[%d] %s', $response->get_status(), $message );
+			}
+			return new \WP_Error( $error->get_error_code(), $message );
 		}
 
 		$data = $response->get_data();

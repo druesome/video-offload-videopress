@@ -522,6 +522,9 @@ class Offloader {
 		if ( ! $file || ! file_exists( $file ) ) {
 			wp_send_json_error( 'Local file not found on the server.' );
 		}
+		if ( ! is_readable( $file ) ) {
+			wp_send_json_error( 'Local file exists but is not readable by the web server. Check file permissions.' );
+		}
 
 		// Resume an existing upload session if one exists, otherwise start fresh.
 		$upload_key       = (string) ( get_post_meta( $attachment_id, self::UPLOAD_KEY_META, true ) ?: '' );
