@@ -110,10 +110,31 @@ jQuery( function ( $ ) {
 			.fail( function () {
 				clearTimeout( pollTimer );
 				clearInterval( animTimer );
-				$loading.remove();
-				$btn.show();
-				$( 'body' ).removeClass( 'vov-offload-active' );
-				offloadActive = false;
+				// Proxy may have timed out while PHP is still uploading server-side.
+				// Check real status before resetting the UI.
+				request( 'vov_get_status', { attachment_id: id } )
+					.done( function ( res ) {
+						if ( res.success && res.data && res.data.status === 'uploaded' ) {
+							location.reload();
+							return;
+						}
+						if ( res.success && res.data && res.data.status === 'uploading' ) {
+							// Still running — reload so the server-rendered auto-poll takes over.
+							$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( 'Still uploading…' );
+							setTimeout( () => location.reload(), 3000 );
+							return;
+						}
+						$loading.remove();
+						$btn.show();
+						$( 'body' ).removeClass( 'vov-offload-active' );
+						offloadActive = false;
+					} )
+					.fail( function () {
+						$loading.remove();
+						$btn.show();
+						$( 'body' ).removeClass( 'vov-offload-active' );
+						offloadActive = false;
+					} );
 			} );
 	} );
 
