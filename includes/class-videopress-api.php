@@ -18,12 +18,36 @@ class VideoPress_API {
 	}
 
 	/**
-	 * Delete Jetpack's tus session transient for an attachment so the next upload
-	 * call creates a brand-new session instead of resuming a stale/expired one.
-	 * Jetpack keys the transient as "s-{site_id}-v-{attachment_id}".
+	 * Terminate the VideoPress tus session for an attachment and delete the local
+	 * WP transient so the next upload creates a genuinely fresh session.
+	 *
+	 * Jetpack keys the transient as "s-{site_id}-v-{attachment_id}". When VideoPress
+	 * receives a new upload POST for the same Upload-Key while an existing session
+	 * is still alive server-side, it returns the old (expired) location URL. PATCHing
+	 * that URL gets 460. Sending DELETE first tells VideoPress to discard the session,
+	 * so the next POST gets a truly new location.
 	 */
 	public static function clear_upload_cache( int $attachment_id ): void {
-		delete_transient( sprintf( 's-%d-v-%d', self::get_blog_id(), $attachment_id ) );
+		$key  = sprintf( 's-%d-v-%d', self::get_blog_id(), $attachment_id );
+		$data = get_transient( $key );
+
+		if ( is_array( $data ) && ! empty( $data['location'] ) ) {
+			$headers = array( 'Tus-Resumable' => '1.0.0' );
+			if ( ! empty( $data['token_for_key'] ) ) {
+				$headers['x-videopress-upload-token'] = $data['token_for_key'];
+			}
+			// Fire-and-forget: if VideoPress doesn't support DELETE we just move on.
+			wp_remote_request(
+				$data['location'],
+				array(
+					'method'  => 'DELETE',
+					'headers' => $headers,
+					'timeout' => 10,
+				)
+			);
+		}
+
+		delete_transient( $key );
 	}
 
 	public static function is_connected(): bool {
