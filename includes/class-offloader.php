@@ -230,6 +230,56 @@ class Offloader {
 	}
 
 	/**
+	 * Retry a persistently-failing upload by creating a temporary proxy attachment.
+	 *
+	 * VideoPress's tus server keys sessions by "s-{site_id}-v-{attachment_id}".
+	 * When that key accumulates stale server-side state (broken token, expired
+	 * session it won't discard), even a freshly-created session for that key
+	 * gets 460 on the first PATCH. A proxy WP attachment gets a new post ID and
+	 * therefore a fresh Upload-Key that VideoPress has never seen, breaking the
+	 * cycle. On success the GUID is applied back to the original attachment.
+	 *
+	 * Clears the proxy's _wp_attached_file before deletion so WordPress does not
+	 * try to delete the physical video file that belongs to the original.
+	 *
+	 * @return array|\WP_Error  Same shape as run_offload() on success.
+	 */
+	private static function offload_via_proxy( int $attachment_id ) {
+		$file_meta = get_post_meta( $attachment_id, '_wp_attached_file', true );
+		if ( ! $file_meta ) {
+			return new \WP_Error( 'no_file_meta', 'Cannot determine file path for proxy upload.' );
+		}
+
+		$proxy_id = wp_insert_post( array(
+			'post_type'      => 'attachment',
+			'post_status'    => 'inherit',
+			'post_mime_type' => get_post_mime_type( $attachment_id ),
+			'post_title'     => 'vov-proxy',
+		) );
+
+		if ( is_wp_error( $proxy_id ) || ! $proxy_id ) {
+			return new \WP_Error( 'proxy_create_failed', 'Could not create proxy attachment for retry.' );
+		}
+
+		update_post_meta( $proxy_id, '_wp_attached_file', $file_meta );
+		$wp_meta = get_post_meta( $attachment_id, '_wp_attachment_metadata', true );
+		if ( $wp_meta ) {
+			update_post_meta( $proxy_id, '_wp_attachment_metadata', $wp_meta );
+		}
+
+		// Upload through the proxy — Upload-Key is s-{site_id}-v-{proxy_id}, never used before.
+		$result = self::run_offload( $proxy_id );
+
+		// Remove file meta BEFORE deleting the post so WordPress doesn't unlink the video file.
+		delete_post_meta( $proxy_id, '_wp_attached_file' );
+		delete_post_meta( $proxy_id, '_wp_attachment_metadata' );
+		VideoPress_API::clear_upload_cache( $proxy_id );
+		wp_delete_post( $proxy_id, true );
+
+		return $result;
+	}
+
+	/**
 	 * Synchronous full-upload loop — handles chunked transfers. Used by WP-CLI.
 	 *
 	 * @param callable|null $on_progress Called on each chunk: fn( int $bytes_uploaded, int $file_size )
@@ -520,9 +570,21 @@ class Offloader {
 					continue;
 				}
 
+				// Both the initial attempt and the fresh-key retry failed (persistent 460).
+				// The Upload-Key "s-{site_id}-v-{id}" has stale state on VideoPress's
+				// server that our cache-clear cannot remove. Retry through a temporary
+				// proxy attachment so VideoPress sees a brand-new Upload-Key.
+				$proxy_result = self::offload_via_proxy( $attachment_id );
+				if ( ! is_wp_error( $proxy_result ) && ! empty( $proxy_result['guid'] ) ) {
+					$result = $proxy_result;
+					break;
+				}
+				$error_msg = is_wp_error( $proxy_result )
+					? $proxy_result->get_error_message()
+					: $result->get_error_message();
 				delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
-				self::set_status( $attachment_id, self::STATUS_ERROR, $result->get_error_message() );
-				wp_send_json_error( $result->get_error_message() );
+				self::set_status( $attachment_id, self::STATUS_ERROR, $error_msg );
+				wp_send_json_error( $error_msg );
 			}
 
 			if ( ! empty( $result['uploading'] ) ) {
