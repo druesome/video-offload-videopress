@@ -16,6 +16,7 @@ class Offloader {
 	const PROGRESS_META       = '_vov_progress';
 	const UPLOAD_STARTED_META = '_vov_upload_started';
 	const LAST_VERIFIED_META  = '_vov_last_verified';
+	const PROXY_META          = '_vov_proxy';
 	const SAVED_BYTES_OPTION  = 'vov_space_saved_bytes';
 
 	const STATUS_NONE      = 'none';
@@ -262,6 +263,7 @@ class Offloader {
 		}
 
 		update_post_meta( $proxy_id, '_wp_attached_file', $file_meta );
+		update_post_meta( $proxy_id, self::PROXY_META, '1' );
 		$wp_meta = get_post_meta( $attachment_id, '_wp_attachment_metadata', true );
 		if ( $wp_meta ) {
 			update_post_meta( $proxy_id, '_wp_attachment_metadata', $wp_meta );

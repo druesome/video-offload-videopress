@@ -20,6 +20,11 @@ class Admin {
 		// Pair-view filter: ?vov_pair=vp_id,local_id shows just those two rows.
 		add_filter( 'pre_get_posts', array( self::class, 'apply_pair_filter' ) );
 
+		// Hide and clean up temporary proxy attachments used for retry uploads.
+		add_filter( 'pre_get_posts', array( self::class, 'hide_proxy_attachments' ) );
+		add_filter( 'ajax_query_attachments_args', array( self::class, 'hide_proxy_attachments_ajax' ) );
+		add_action( 'admin_init', array( self::class, 'cleanup_orphaned_proxies' ) );
+
 		// Reset local video status when its VideoPress attachment is permanently deleted.
 		add_action( 'delete_attachment', array( Offloader::class, 'on_vp_attachment_deleted' ) );
 	}
@@ -219,6 +224,50 @@ class Admin {
 		$query->set( 'post__in', $ids );
 		$query->set( 'orderby', 'post__in' );
 		$query->set( 'posts_per_page', -1 );
+	}
+
+	/**
+	 * Exclude proxy attachments from media library list/grid queries.
+	 */
+	public static function hide_proxy_attachments( \WP_Query $query ): void {
+		if ( 'attachment' !== $query->get( 'post_type' ) ) {
+			return;
+		}
+		$meta_query   = (array) $query->get( 'meta_query' );
+		$meta_query[] = array(
+			'key'     => Offloader::PROXY_META,
+			'compare' => 'NOT EXISTS',
+		);
+		$query->set( 'meta_query', $meta_query );
+	}
+
+	/**
+	 * Exclude proxy attachments from the media modal AJAX query.
+	 */
+	public static function hide_proxy_attachments_ajax( array $args ): array {
+		$args['meta_query'][] = array(
+			'key'     => Offloader::PROXY_META,
+			'compare' => 'NOT EXISTS',
+		);
+		return $args;
+	}
+
+	/**
+	 * Delete any proxy posts left over from a crashed upload request.
+	 * Uses a direct DB query to bypass the hide_proxy_attachments filter.
+	 */
+	public static function cleanup_orphaned_proxies(): void {
+		global $wpdb;
+		$ids = $wpdb->get_col( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = %s LIMIT 10",
+			Offloader::PROXY_META,
+			'1'
+		) );
+		foreach ( array_map( 'intval', $ids ?: array() ) as $id ) {
+			delete_post_meta( $id, '_wp_attached_file' );
+			delete_post_meta( $id, '_wp_attachment_metadata' );
+			wp_delete_post( $id, true );
+		}
 	}
 
 	// -------------------------------------------------------------------------
