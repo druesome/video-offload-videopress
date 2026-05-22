@@ -320,14 +320,17 @@ class Offloader {
 	 * @return array|\WP_Error
 	 */
 	public static function run_offload( int $attachment_id, ?callable $on_progress = null ) {
-		$upload_key    = (string) ( get_post_meta( $attachment_id, self::UPLOAD_KEY_META, true ) ?: '' );
-		$retried_fresh = false;
+		$upload_key          = (string) ( get_post_meta( $attachment_id, self::UPLOAD_KEY_META, true ) ?: '' );
+		$retried_fresh       = false;
+		$retried_no_checksum = false;
+		$strip_checksum      = false;
 
 		self::set_status( $attachment_id, self::STATUS_UPLOADING );
 
 		$result = null;
 		for ( $i = 0; $i < 600; $i++ ) {
-			$result = VideoPress_API::upload_video( $attachment_id, $upload_key );
+			$result = VideoPress_API::upload_video( $attachment_id, $upload_key, $strip_checksum );
+			$strip_checksum = false;
 
 			if ( is_wp_error( $result ) ) {
 				$jetpack_guid = get_post_meta( $attachment_id, 'videopress_guid', true );
@@ -335,12 +338,20 @@ class Offloader {
 					$result = array( 'guid' => $jetpack_guid, 'media_id' => 0 );
 					break;
 				}
-				// bytes_uploaded=-1 means the session expired with nothing received — restart fresh once.
 				$err_data       = $result->get_error_data();
 				$bytes_on_error = isset( $err_data['bytes_uploaded'] ) ? (int) $err_data['bytes_uploaded'] : 0;
 				if ( $bytes_on_error < 0 && ! $retried_fresh ) {
 					$upload_key    = '';
 					$retried_fresh = true;
+					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+					VideoPress_API::clear_upload_cache( $attachment_id );
+					sleep( 2 );
+					continue;
+				}
+				if ( $bytes_on_error < 0 && ! $retried_no_checksum ) {
+					$upload_key          = '';
+					$retried_no_checksum = true;
+					$strip_checksum      = true;
 					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
 					VideoPress_API::clear_upload_cache( $attachment_id );
 					sleep( 2 );
@@ -542,16 +553,19 @@ class Offloader {
 		}
 
 		// Resume an existing upload session if one exists, otherwise start fresh.
-		$upload_key       = (string) ( get_post_meta( $attachment_id, self::UPLOAD_KEY_META, true ) ?: '' );
-		$retried_fresh    = false;
-		$had_active_chunk = false; // True once VideoPress starts a chunked session.
-		$max_bytes_seen   = 0;    // Highest bytes_uploaded reported during this request.
-		$result           = null;
+		$upload_key          = (string) ( get_post_meta( $attachment_id, self::UPLOAD_KEY_META, true ) ?: '' );
+		$retried_fresh       = false;
+		$retried_no_checksum = false;
+		$strip_checksum      = false;
+		$had_active_chunk    = false; // True once VideoPress starts a chunked session.
+		$max_bytes_seen      = 0;    // Highest bytes_uploaded reported during this request.
+		$result              = null;
 
 		self::set_status( $attachment_id, self::STATUS_UPLOADING );
 
 		for ( $i = 0; $i < 600; $i++ ) {
-			$result = VideoPress_API::upload_video( $attachment_id, $upload_key );
+			$result = VideoPress_API::upload_video( $attachment_id, $upload_key, $strip_checksum );
+			$strip_checksum = false;
 
 			if ( is_wp_error( $result ) ) {
 				// Jetpack may have written the GUID despite the error (e.g. 409 / 400 during finalization).
@@ -597,7 +611,7 @@ class Offloader {
 				}
 
 				// First-attempt failure (no prior chunk activity): clear any stale key
-				// and retry once with a fresh session (handles 460 "session expired").
+				// and retry once with a fresh session (handles simple 460 expiry).
 				if ( ! $retried_fresh ) {
 					$upload_key    = '';
 					$retried_fresh = true;
@@ -607,29 +621,23 @@ class Offloader {
 					continue;
 				}
 
-				// Both the initial attempt and the fresh-key retry failed (persistent 460).
-				// The Upload-Key "s-{site_id}-v-{id}" has stale state on VideoPress's
-				// server that our cache-clear cannot remove. Retry through a temporary
-				// proxy attachment so VideoPress sees a brand-new Upload-Key.
-				$_diag_key = sprintf( 's-%d-v-%d', VideoPress_API::get_blog_id(), $attachment_id );
-				error_log( sprintf(
-					'VOV persistent 460 for attachment %d — tus transient (%s): %s | error: %s',
-					$attachment_id,
-					$_diag_key,
-					wp_json_encode( get_transient( $_diag_key ) ),
-					$result->get_error_message()
-				) );
-				$proxy_result = self::offload_via_proxy( $attachment_id );
-				if ( ! is_wp_error( $proxy_result ) && ! empty( $proxy_result['guid'] ) ) {
-					$result = $proxy_result;
-					break;
+				// Second failure: VideoPress may be deduplicating by Upload-Checksum
+				// (SHA256 of file content) and returning the same stale session for
+				// this file regardless of key. Retry without the checksum header so
+				// VideoPress is forced to create a genuinely new session.
+				if ( ! $retried_no_checksum ) {
+					$upload_key          = '';
+					$retried_no_checksum = true;
+					$strip_checksum      = true;
+					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+					VideoPress_API::clear_upload_cache( $attachment_id );
+					sleep( 2 );
+					continue;
 				}
-				$error_msg = is_wp_error( $proxy_result )
-					? $proxy_result->get_error_message()
-					: $result->get_error_message();
+
 				delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
-				self::set_status( $attachment_id, self::STATUS_ERROR, $error_msg );
-				wp_send_json_error( $error_msg );
+				self::set_status( $attachment_id, self::STATUS_ERROR, $result->get_error_message() );
+				wp_send_json_error( $result->get_error_message() );
 			}
 
 			if ( ! empty( $result['uploading'] ) ) {

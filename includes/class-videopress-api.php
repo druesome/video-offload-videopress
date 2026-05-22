@@ -107,7 +107,7 @@ class VideoPress_API {
 	 *
 	 * @return array{guid: string, media_id: int}|array{uploading: true, upload_key: string, bytes_uploaded: int, file_size: int}|\WP_Error
 	 */
-	public static function upload_video( int $attachment_id, string $upload_key = '' ) {
+	public static function upload_video( int $attachment_id, string $upload_key = '', bool $strip_checksum = false ) {
 		if ( ! self::is_connected() ) {
 			return new \WP_Error( 'no_connection', __( 'Jetpack is not connected to WordPress.com.', 'video-offload-videopress' ) );
 		}
@@ -150,8 +150,29 @@ class VideoPress_API {
 			return $args;
 		};
 		add_filter( 'http_request_args', $bump_timeout, 999, 2 );
+
+		// Optionally strip the Upload-Checksum header from the tus session-creation
+		// POST so VideoPress cannot match this upload to a stale cached session for
+		// the same file content. The create request is identified by Upload-Length.
+		$strip_fn = null;
+		if ( $strip_checksum ) {
+			$strip_fn = static function ( $args, $url ) {
+				if (
+					strpos( $url, 'public-api.wordpress.com/rest/v1.1/video-uploads/' ) !== false
+					&& ! empty( $args['headers']['Upload-Length'] )
+				) {
+					unset( $args['headers']['Upload-Checksum'] );
+				}
+				return $args;
+			};
+			add_filter( 'http_request_args', $strip_fn, 998, 2 );
+		}
+
 		$response = rest_do_request( $request );
 		remove_filter( 'http_request_args', $bump_timeout, 999 );
+		if ( $strip_fn ) {
+			remove_filter( 'http_request_args', $strip_fn, 998 );
+		}
 
 		if ( $response->is_error() ) {
 			$error   = $response->as_error();
