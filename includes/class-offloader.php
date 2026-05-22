@@ -457,6 +457,7 @@ class Offloader {
 		$upload_key       = (string) ( get_post_meta( $attachment_id, self::UPLOAD_KEY_META, true ) ?: '' );
 		$retried_fresh    = false;
 		$had_active_chunk = false; // True once VideoPress starts a chunked session.
+		$max_bytes_seen   = 0;    // Highest bytes_uploaded reported during this request.
 		$result           = null;
 
 		self::set_status( $attachment_id, self::STATUS_UPLOADING );
@@ -476,13 +477,13 @@ class Offloader {
 				// If we were already mid-upload when the error arrived, VideoPress is
 				// likely still processing. Retrying would create a duplicate video.
 				// Poll for the Jetpack GUID instead (up to ~30 s).
-				// Exception: bytes_uploaded=-1 means the session expired with nothing received,
-				// so it's safe to restart with a fresh session rather than wait for a GUID.
+				// Exception: bytes_uploaded=-1 AND no bytes were seen during this request
+				// means the session was dead from the start — safe to restart fresh.
 				if ( $had_active_chunk ) {
 					$err_data       = $result->get_error_data();
 					$bytes_on_error = isset( $err_data['bytes_uploaded'] ) ? (int) $err_data['bytes_uploaded'] : 0;
 
-					if ( $bytes_on_error < 0 && ! $retried_fresh ) {
+					if ( $bytes_on_error < 0 && $max_bytes_seen === 0 && ! $retried_fresh ) {
 						$upload_key       = '';
 						$had_active_chunk = false;
 						$retried_fresh    = true;
@@ -497,10 +498,13 @@ class Offloader {
 						$result = array( 'guid' => $jetpack_guid, 'media_id' => 0 );
 						break;
 					}
-					// Gave up waiting — report the original error.
+					// Gave up waiting — report a user-friendly message.
 					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
-					self::set_status( $attachment_id, self::STATUS_ERROR, $result->get_error_message() );
-					wp_send_json_error( $result->get_error_message() );
+					$error_msg = $max_bytes_seen > 0
+						? 'The upload session ended near completion. VideoPress may still be processing — wait a minute, then refresh the page. If the video still shows as an error, click Retry.'
+						: $result->get_error_message();
+					self::set_status( $attachment_id, self::STATUS_ERROR, $error_msg );
+					wp_send_json_error( $error_msg );
 				}
 
 				// First-attempt failure (no prior chunk activity): clear any stale key
@@ -524,8 +528,12 @@ class Offloader {
 				if ( $upload_key ) {
 					update_post_meta( $attachment_id, self::UPLOAD_KEY_META, $upload_key );
 				}
+				$bytes_now = (int) ( $result['bytes_uploaded'] ?? 0 );
+				if ( $bytes_now > $max_bytes_seen ) {
+					$max_bytes_seen = $bytes_now;
+				}
 				update_post_meta( $attachment_id, self::PROGRESS_META, array(
-					'bytes_uploaded' => (int) $result['bytes_uploaded'],
+					'bytes_uploaded' => $bytes_now,
 					'file_size'      => (int) $result['file_size'],
 				) );
 				continue;
