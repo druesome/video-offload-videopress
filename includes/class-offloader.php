@@ -242,7 +242,7 @@ class Offloader {
 		self::set_status( $attachment_id, self::STATUS_UPLOADING );
 
 		$result = null;
-		for ( $i = 0; $i < 120; $i++ ) {
+		for ( $i = 0; $i < 600; $i++ ) {
 			$result = VideoPress_API::upload_video( $attachment_id, $upload_key );
 
 			if ( is_wp_error( $result ) ) {
@@ -462,7 +462,7 @@ class Offloader {
 
 		self::set_status( $attachment_id, self::STATUS_UPLOADING );
 
-		for ( $i = 0; $i < 120; $i++ ) {
+		for ( $i = 0; $i < 600; $i++ ) {
 			$result = VideoPress_API::upload_video( $attachment_id, $upload_key );
 
 			if ( is_wp_error( $result ) ) {
