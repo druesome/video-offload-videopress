@@ -269,6 +269,20 @@ class Offloader {
 			update_post_meta( $proxy_id, '_wp_attachment_metadata', $wp_meta );
 		}
 
+		// Resolve the original attachment's file path before any platform filters
+		// (e.g. Atomic) can modify it, so we can force the proxy to use the same
+		// path. On Atomic, get_attached_file() for a freshly-inserted proxy may
+		// return a different or unresolvable path because the platform filter only
+		// knows about "real" media attachments. VideoPress's is_valid_attachment_id()
+		// calls get_attached_file() + is_readable(), so the proxy must return the
+		// same resolved path as the original.
+		$original_file = get_attached_file( $attachment_id );
+
+		$force_file = static function ( $file, $id ) use ( $proxy_id, $original_file ) {
+			return $id === $proxy_id ? $original_file : $file;
+		};
+		add_filter( 'get_attached_file', $force_file, 999, 2 );
+
 		// Strip Upload-Checksum from the tus session-creation POST so VideoPress
 		// cannot match this upload to a cached (expired) session for the same file
 		// content. Without the checksum, VideoPress creates a genuinely new session.
@@ -288,6 +302,7 @@ class Offloader {
 		$result = self::run_offload( $proxy_id );
 
 		remove_filter( 'http_request_args', $strip_checksum, 998 );
+		remove_filter( 'get_attached_file', $force_file, 999 );
 
 		// Remove file meta BEFORE deleting the post so WordPress doesn't unlink the video file.
 		delete_post_meta( $proxy_id, '_wp_attached_file' );
