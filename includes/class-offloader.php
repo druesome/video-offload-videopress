@@ -267,8 +267,25 @@ class Offloader {
 			update_post_meta( $proxy_id, '_wp_attachment_metadata', $wp_meta );
 		}
 
+		// Strip Upload-Checksum from the tus session-creation POST so VideoPress
+		// cannot match this upload to a cached (expired) session for the same file
+		// content. Without the checksum, VideoPress creates a genuinely new session.
+		// The create request is identified by the presence of Upload-Length in headers.
+		$strip_checksum = static function ( $args, $url ) {
+			if (
+				strpos( $url, 'public-api.wordpress.com/rest/v1.1/video-uploads/' ) !== false
+				&& ! empty( $args['headers']['Upload-Length'] )
+			) {
+				unset( $args['headers']['Upload-Checksum'] );
+			}
+			return $args;
+		};
+		add_filter( 'http_request_args', $strip_checksum, 998, 2 );
+
 		// Upload through the proxy — Upload-Key is s-{site_id}-v-{proxy_id}, never used before.
 		$result = self::run_offload( $proxy_id );
+
+		remove_filter( 'http_request_args', $strip_checksum, 998 );
 
 		// Remove file meta BEFORE deleting the post so WordPress doesn't unlink the video file.
 		delete_post_meta( $proxy_id, '_wp_attached_file' );
@@ -574,6 +591,14 @@ class Offloader {
 				// The Upload-Key "s-{site_id}-v-{id}" has stale state on VideoPress's
 				// server that our cache-clear cannot remove. Retry through a temporary
 				// proxy attachment so VideoPress sees a brand-new Upload-Key.
+				$_diag_key = sprintf( 's-%d-v-%d', VideoPress_API::get_blog_id(), $attachment_id );
+				error_log( sprintf(
+					'VOV persistent 460 for attachment %d — tus transient (%s): %s | error: %s',
+					$attachment_id,
+					$_diag_key,
+					wp_json_encode( get_transient( $_diag_key ) ),
+					$result->get_error_message()
+				) );
 				$proxy_result = self::offload_via_proxy( $attachment_id );
 				if ( ! is_wp_error( $proxy_result ) && ! empty( $proxy_result['guid'] ) ) {
 					$result = $proxy_result;

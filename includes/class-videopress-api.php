@@ -140,7 +140,18 @@ class VideoPress_API {
 		if ( $upload_key ) {
 			$request->set_param( 'upload_key', $upload_key );
 		}
+
+		// Increase HTTP timeout for VideoPress tus requests — the default 25 s can
+		// be too short on Atomic where outbound proxies may introduce latency.
+		$bump_timeout = static function ( $args, $url ) {
+			if ( strpos( $url, 'public-api.wordpress.com' ) !== false ) {
+				$args['timeout'] = 120;
+			}
+			return $args;
+		};
+		add_filter( 'http_request_args', $bump_timeout, 999, 2 );
 		$response = rest_do_request( $request );
+		remove_filter( 'http_request_args', $bump_timeout, 999 );
 
 		if ( $response->is_error() ) {
 			$error = $response->as_error();
