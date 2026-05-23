@@ -17,6 +17,10 @@ class Offloader {
 	const UPLOAD_STARTED_META = '_vov_upload_started';
 	const LAST_VERIFIED_META  = '_vov_last_verified';
 	const PROXY_META          = '_vov_proxy';
+	const RETRY_FRESH_META    = '_vov_retried_fresh';
+	const RETRY_CHECKSUM_META = '_vov_retried_no_checksum';
+	const HAD_CHUNK_META      = '_vov_had_active_chunk';
+	const STRIP_CHECKSUM_META = '_vov_strip_checksum';
 	const SAVED_BYTES_OPTION  = 'vov_space_saved_bytes';
 
 	const STATUS_NONE      = 'none';
@@ -117,6 +121,7 @@ class Offloader {
 			}
 			update_post_meta( $id, self::STATUS_META, self::STATUS_NONE );
 			delete_post_meta( $id, self::UPLOAD_STARTED_META );
+			self::cleanup_retry_meta( $id );
 		}
 	}
 
@@ -234,21 +239,22 @@ class Offloader {
 	 * Retry a persistently-failing upload by creating a temporary proxy attachment.
 	 *
 	 * VideoPress's tus server keys sessions by "s-{site_id}-v-{attachment_id}".
-	 * When that key accumulates stale server-side state (broken token, expired
-	 * session it won't discard), even a freshly-created session for that key
-	 * gets 460 on the first PATCH. A proxy WP attachment gets a new post ID and
-	 * therefore a fresh Upload-Key that VideoPress has never seen, breaking the
-	 * cycle. On success the GUID is applied back to the original attachment.
+	 * When that key accumulates broken server-side state, even a freshly-created
+	 * session for that key gets 460 on the first PATCH. A proxy WP attachment gets
+	 * a new post ID — and therefore a fresh Upload-Key that VideoPress has never
+	 * seen — breaking the cycle.
 	 *
-	 * Clears the proxy's _wp_attached_file before deletion so WordPress does not
-	 * try to delete the physical video file that belongs to the original.
+	 * To avoid Jetpack's is_readable() false negatives on Atomic's cloud-backed
+	 * filesystem, we bypass the normal REST endpoint entirely and drive the tus
+	 * upload directly via anonymous subclasses of Uploader and Tus_Client that
+	 * skip the is_readable() checks while still calling @fopen() for actual reads.
 	 *
-	 * @return array|\WP_Error  Same shape as run_offload() on success.
+	 * @return array|\WP_Error  {guid, media_id} on success, WP_Error on failure.
 	 */
 	private static function offload_via_proxy( int $attachment_id ) {
-		$file_meta = get_post_meta( $attachment_id, '_wp_attached_file', true );
-		if ( ! $file_meta ) {
-			return new \WP_Error( 'no_file_meta', 'Cannot determine file path for proxy upload.' );
+		$original_file = get_attached_file( $attachment_id );
+		if ( ! $original_file || ! file_exists( $original_file ) ) {
+			return new \WP_Error( 'file_not_found', 'Original file not found for proxy upload.' );
 		}
 
 		$proxy_id = wp_insert_post( array(
@@ -262,31 +268,16 @@ class Offloader {
 			return new \WP_Error( 'proxy_create_failed', 'Could not create proxy attachment for retry.' );
 		}
 
-		update_post_meta( $proxy_id, '_wp_attached_file', $file_meta );
+		// Mark as proxy so it's hidden from the media library (Admin::hide_proxy_attachments).
+		// Do NOT set _wp_attached_file — the upload path never calls get_attached_file() for
+		// the proxy, and omitting it prevents WordPress from unlinking the original video file
+		// if the proxy post is ever force-deleted.
 		update_post_meta( $proxy_id, self::PROXY_META, '1' );
-		$wp_meta = get_post_meta( $attachment_id, '_wp_attachment_metadata', true );
-		if ( $wp_meta ) {
-			update_post_meta( $proxy_id, '_wp_attachment_metadata', $wp_meta );
-		}
 
-		// Resolve the original attachment's file path before any platform filters
-		// (e.g. Atomic) can modify it, so we can force the proxy to use the same
-		// path. On Atomic, get_attached_file() for a freshly-inserted proxy may
-		// return a different or unresolvable path because the platform filter only
-		// knows about "real" media attachments. VideoPress's is_valid_attachment_id()
-		// calls get_attached_file() + is_readable(), so the proxy must return the
-		// same resolved path as the original.
-		$original_file = get_attached_file( $attachment_id );
-
-		$force_file = static function ( $file, $id ) use ( $proxy_id, $original_file ) {
-			return $id === $proxy_id ? $original_file : $file;
-		};
-		add_filter( 'get_attached_file', $force_file, 999, 2 );
+		$proxy_key = sprintf( 's-%d-v-%d', \Jetpack_Options::get_option( 'id' ), $proxy_id );
 
 		// Strip Upload-Checksum from the tus session-creation POST so VideoPress
-		// cannot match this upload to a cached (expired) session for the same file
-		// content. Without the checksum, VideoPress creates a genuinely new session.
-		// The create request is identified by the presence of Upload-Length in headers.
+		// cannot match this upload to a cached (expired) session for the same file.
 		$strip_checksum = static function ( $args, $url ) {
 			if (
 				strpos( $url, 'public-api.wordpress.com/rest/v1.1/video-uploads/' ) !== false
@@ -298,17 +289,95 @@ class Offloader {
 		};
 		add_filter( 'http_request_args', $strip_checksum, 998, 2 );
 
-		// Upload through the proxy — Upload-Key is s-{site_id}-v-{proxy_id}, never used before.
-		$result = self::run_offload( $proxy_id );
+		$bump_timeout = static function ( $args, $url ) {
+			if ( strpos( $url, 'public-api.wordpress.com' ) !== false ) {
+				$args['timeout'] = 120;
+			}
+			return $args;
+		};
+		add_filter( 'http_request_args', $bump_timeout, 999, 2 );
+
+		// Anonymous Uploader subclass: skip parent::__construct() (which calls is_readable()),
+		// override get_file_path() and get_key() to use the proxy values, and override
+		// get_client() to return a Tus_Client that also skips is_readable() in file().
+		$uploader = new class( $proxy_id, $original_file, $proxy_key ) extends \Automattic\Jetpack\VideoPress\Uploader {
+			private string $real_file;
+			private string $proxy_key_str;
+
+			public function __construct( int $proxy_id, string $real_file, string $proxy_key_str ) {
+				$this->attachment_id   = $proxy_id;
+				$this->real_file       = $real_file;
+				$this->proxy_key_str   = $proxy_key_str;
+			}
+
+			public function get_file_path(): string {
+				return $this->real_file;
+			}
+
+			public function get_key(): string {
+				return $this->proxy_key_str;
+			}
+
+			public function get_client(): \VideoPressUploader\Tus_Client {
+				if ( $this->client !== null ) {
+					return $this->client;
+				}
+				$token   = $this->get_upload_token();
+				$blog_id = (int) \Jetpack_Options::get_option( 'id' );
+				$key     = $this->proxy_key_str;
+				$this->client = new class( $key, $token, $blog_id ) extends \VideoPressUploader\Tus_Client {
+					public function file( $file, $name = null ): self {
+						if ( ! is_string( $file ) ) {
+							throw new \InvalidArgumentException( '$file needs to be a string' );
+						}
+						if ( ! file_exists( $file ) ) {
+							throw new \VideoPressUploader\Tus_Exception( 'Cannot read file: ' . $file );
+						}
+						// Skip is_readable() — false negative on Atomic cloud-backed filesystem.
+						$this->file_path = $file;
+						$this->file_name = ! empty( $name ) ? basename( $this->file_path ) : '';
+						$this->file_size = filesize( $file );
+						$this->add_metadata( 'filename', $this->file_name );
+						return $this;
+					}
+				};
+				return $this->client;
+			}
+		};
+
+		// Each call to upload() sends one 5 MB chunk.
+		$result = null;
+		for ( $i = 0; $i < 600; $i++ ) {
+			$status = $uploader->upload();
+			if ( 'error' === ( $status['status'] ?? '' ) ) {
+				$result = new \WP_Error(
+					'proxy_upload_error',
+					$status['error'] ?? 'Proxy upload failed',
+					array( 'bytes_uploaded' => (int) ( $status['bytes_uploaded'] ?? -1 ) )
+				);
+				break;
+			}
+			if ( 'complete' === ( $status['status'] ?? '' ) ) {
+				$details = $status['uploaded_details'] ?? array();
+				$result  = array(
+					'guid'     => (string) ( $details['guid'] ?? '' ),
+					'media_id' => (int) ( $details['media_id'] ?? 0 ),
+				);
+				break;
+			}
+			// 'uploading' — continue to next chunk
+		}
 
 		remove_filter( 'http_request_args', $strip_checksum, 998 );
-		remove_filter( 'get_attached_file', $force_file, 999 );
+		remove_filter( 'http_request_args', $bump_timeout, 999 );
 
-		// Remove file meta BEFORE deleting the post so WordPress doesn't unlink the video file.
-		delete_post_meta( $proxy_id, '_wp_attached_file' );
-		delete_post_meta( $proxy_id, '_wp_attachment_metadata' );
+		// Clean up. No _wp_attached_file was set so WordPress won't unlink the video.
 		VideoPress_API::clear_upload_cache( $proxy_id );
 		wp_delete_post( $proxy_id, true );
+
+		if ( null === $result ) {
+			return new \WP_Error( 'proxy_timeout', 'Proxy upload timed out.' );
+		}
 
 		return $result;
 	}
@@ -320,17 +389,51 @@ class Offloader {
 	 * @return array|\WP_Error
 	 */
 	public static function run_offload( int $attachment_id, ?callable $on_progress = null ) {
-		$upload_key          = (string) ( get_post_meta( $attachment_id, self::UPLOAD_KEY_META, true ) ?: '' );
-		$retried_fresh       = false;
-		$retried_no_checksum = false;
-		$strip_checksum      = false;
+		$upload_key           = (string) ( get_post_meta( $attachment_id, self::UPLOAD_KEY_META, true ) ?: '' );
+		$retried_fresh        = false;
+		$retried_no_checksum  = false;
+		$retried_random_key   = false;
+		$strip_checksum       = false;
+		$randomize_key        = false;
+
+		// If the previous run left the attachment in an error state, clear any stale
+		// tus session proactively so the first attempt starts fresh.
+		$prev_status = get_post_meta( $attachment_id, self::STATUS_META, true );
+		if ( self::STATUS_ERROR === $prev_status && $upload_key ) {
+			VideoPress_API::clear_upload_cache( $attachment_id );
+			delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+			$upload_key = '';
+		}
 
 		self::set_status( $attachment_id, self::STATUS_UPLOADING );
 
+		$file           = get_attached_file( $attachment_id );
+		$file_size      = $file ? (int) filesize( $file ) : 0;
+		$max_bytes_seen = 0;
+		$stall_count    = 0;
+
+		$progress_hook = static function ( $response, $parsed_args, $url ) use ( $on_progress, $file_size, &$max_bytes_seen ) {
+			if (
+				204 === wp_remote_retrieve_response_code( $response )
+				&& strpos( $url, 'public-api.wordpress.com' ) !== false
+			) {
+				$offset = wp_remote_retrieve_header( $response, 'upload-offset' );
+				if ( $offset !== '' ) {
+					$max_bytes_seen = max( $max_bytes_seen, (int) $offset );
+					if ( $on_progress ) {
+						$on_progress( (int) $offset, $file_size );
+					}
+				}
+			}
+			return $response;
+		};
+		add_filter( 'http_response', $progress_hook, 10, 3 );
+
 		$result = null;
 		for ( $i = 0; $i < 600; $i++ ) {
-			$result = VideoPress_API::upload_video( $attachment_id, $upload_key, $strip_checksum );
+			$result = VideoPress_API::upload_video( $attachment_id, $upload_key, $strip_checksum, $randomize_key );
 			$strip_checksum = false;
+			$randomize_key  = false;
 
 			if ( is_wp_error( $result ) ) {
 				$jetpack_guid = get_post_meta( $attachment_id, 'videopress_guid', true );
@@ -345,7 +448,7 @@ class Offloader {
 					$retried_fresh = true;
 					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
 					VideoPress_API::clear_upload_cache( $attachment_id );
-					sleep( 2 );
+					sleep( 30 ); // Give VideoPress time to release the stale session.
 					continue;
 				}
 				if ( $bytes_on_error < 0 && ! $retried_no_checksum ) {
@@ -354,12 +457,28 @@ class Offloader {
 					$strip_checksum      = true;
 					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
 					VideoPress_API::clear_upload_cache( $attachment_id );
-					sleep( 2 );
+					sleep( 30 );
+					continue;
+				}
+				if ( $bytes_on_error < 0 && ! $retried_random_key ) {
+					$upload_key         = '';
+					$retried_random_key = true;
+					$strip_checksum     = true;
+					$randomize_key      = true;
+					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+					VideoPress_API::clear_upload_cache( $attachment_id );
+					sleep( 30 );
+					continue;
+				}
+				if ( ! $retried_fresh ) {
+					$upload_key    = '';
+					$retried_fresh = true;
+					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+					VideoPress_API::clear_upload_cache( $attachment_id );
 					continue;
 				}
 				delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
-				self::set_status( $attachment_id, self::STATUS_ERROR, $result->get_error_message() );
-				return $result;
+				break;
 			}
 
 			if ( ! empty( $result['uploading'] ) ) {
@@ -370,26 +489,54 @@ class Offloader {
 				if ( $on_progress && isset( $result['bytes_uploaded'], $result['file_size'] ) ) {
 					$on_progress( (int) $result['bytes_uploaded'], (int) $result['file_size'] );
 				}
+				if ( (int) ( $result['bytes_uploaded'] ?? 0 ) <= 0 && $max_bytes_seen <= 0 ) {
+					$stall_count++;
+					if ( $stall_count >= 10 ) {
+						break;
+					}
+				} else {
+					$stall_count = 0;
+				}
 				continue;
 			}
 
 			break;
 		}
 
-		if ( $result && ! empty( $result['uploading'] ) ) {
-			self::set_status( $attachment_id, self::STATUS_ERROR, 'Upload timed out.' );
-			return new \WP_Error( 'timeout', 'Upload timed out.' );
+		remove_filter( 'http_response', $progress_hook, 10 );
+
+		// Success — got a GUID directly from the upload.
+		if ( $result && ! is_wp_error( $result ) && ! empty( $result['guid'] ) ) {
+			self::complete_upload( $attachment_id, $result );
+			return $result;
 		}
 
+		// Upload failed, stalled, or timed out — try fallbacks.
 		delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
-		update_post_meta( $attachment_id, self::GUID_META, sanitize_text_field( $result['guid'] ) );
-		if ( ! empty( $result['media_id'] ) ) {
-			update_post_meta( $attachment_id, self::MEDIA_ID_META, (int) $result['media_id'] );
-		}
-		self::store_source_url( $attachment_id, $result['guid'] );
-		self::set_status( $attachment_id, self::STATUS_UPLOADED );
 
-		return $result;
+		$jetpack_guid = get_post_meta( $attachment_id, 'videopress_guid', true );
+		if ( $jetpack_guid ) {
+			$fallback = array( 'guid' => $jetpack_guid, 'media_id' => 0 );
+			self::complete_upload( $attachment_id, $fallback );
+			return $fallback;
+		}
+
+		$proxy_result = self::offload_via_proxy( $attachment_id );
+		if ( ! is_wp_error( $proxy_result ) && ! empty( $proxy_result['guid'] ) ) {
+			self::complete_upload( $attachment_id, $proxy_result );
+			return $proxy_result;
+		}
+
+		$late_guid = self::wait_for_jetpack_guid( $attachment_id, 6, 5 );
+		if ( $late_guid ) {
+			$fallback = array( 'guid' => $late_guid, 'media_id' => 0 );
+			self::complete_upload( $attachment_id, $fallback );
+			return $fallback;
+		}
+
+		$error_msg = is_wp_error( $result ) ? $result->get_error_message() : 'Upload did not complete.';
+		self::set_status( $attachment_id, self::STATUS_ERROR, $error_msg );
+		return is_wp_error( $result ) ? $result : new \WP_Error( 'upload_failed', $error_msg );
 	}
 
 	public static function get_status( int $attachment_id ): array {
@@ -491,6 +638,24 @@ class Offloader {
 		}
 	}
 
+	private static function cleanup_retry_meta( int $attachment_id ): void {
+		delete_post_meta( $attachment_id, self::RETRY_FRESH_META );
+		delete_post_meta( $attachment_id, self::RETRY_CHECKSUM_META );
+		delete_post_meta( $attachment_id, self::HAD_CHUNK_META );
+		delete_post_meta( $attachment_id, self::STRIP_CHECKSUM_META );
+	}
+
+	private static function complete_upload( int $attachment_id, array $result ): void {
+		delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+		delete_post_meta( $attachment_id, self::PROGRESS_META );
+		update_post_meta( $attachment_id, self::GUID_META, sanitize_text_field( $result['guid'] ) );
+		if ( ! empty( $result['media_id'] ) ) {
+			update_post_meta( $attachment_id, self::MEDIA_ID_META, (int) $result['media_id'] );
+		}
+		self::store_source_url( $attachment_id, $result['guid'] );
+		self::set_status( $attachment_id, self::STATUS_UPLOADED );
+	}
+
 	// -------------------------------------------------------------------------
 	// AJAX handlers
 	// -------------------------------------------------------------------------
@@ -507,7 +672,6 @@ class Offloader {
 			wp_send_json_error( 'Invalid attachment ID.' );
 		}
 
-		// Keep PHP running even if the Atomic proxy closes the HTTP connection mid-upload.
 		ignore_user_abort( true );
 		if ( function_exists( 'set_time_limit' ) ) {
 			set_time_limit( 0 );
@@ -552,134 +716,164 @@ class Offloader {
 			wp_send_json_error( 'Local file exists but is not readable by the web server. Check file permissions.' );
 		}
 
-		// Resume an existing upload session if one exists, otherwise start fresh.
+		// Read persisted upload state from previous calls in this sequence.
 		$upload_key          = (string) ( get_post_meta( $attachment_id, self::UPLOAD_KEY_META, true ) ?: '' );
-		$retried_fresh       = false;
-		$retried_no_checksum = false;
-		$strip_checksum      = false;
-		$had_active_chunk    = false; // True once VideoPress starts a chunked session.
-		$max_bytes_seen      = 0;    // Highest bytes_uploaded reported during this request.
-		$result              = null;
-
-		self::set_status( $attachment_id, self::STATUS_UPLOADING );
-
-		for ( $i = 0; $i < 600; $i++ ) {
-			$result = VideoPress_API::upload_video( $attachment_id, $upload_key, $strip_checksum );
-			$strip_checksum = false;
-
-			if ( is_wp_error( $result ) ) {
-				// Jetpack may have written the GUID despite the error (e.g. 409 / 400 during finalization).
-				$jetpack_guid = get_post_meta( $attachment_id, 'videopress_guid', true );
-				if ( $jetpack_guid ) {
-					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
-					$result = array( 'guid' => $jetpack_guid, 'media_id' => 0 );
-					break;
-				}
-
-				// If we were already mid-upload when the error arrived, VideoPress is
-				// likely still processing. Retrying would create a duplicate video.
-				// Poll for the Jetpack GUID instead (up to ~30 s).
-				// Exception: bytes_uploaded=-1 AND no bytes were seen during this request
-				// means the session was dead from the start — safe to restart fresh.
-				if ( $had_active_chunk ) {
-					$err_data       = $result->get_error_data();
-					$bytes_on_error = isset( $err_data['bytes_uploaded'] ) ? (int) $err_data['bytes_uploaded'] : 0;
-
-					if ( $bytes_on_error < 0 && $max_bytes_seen === 0 && ! $retried_fresh ) {
-						$upload_key       = '';
-						$had_active_chunk = false;
-						$retried_fresh    = true;
-						delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
-						VideoPress_API::clear_upload_cache( $attachment_id );
-						sleep( 2 );
-						continue;
-					}
-
-					$jetpack_guid = self::wait_for_jetpack_guid( $attachment_id, 10, 3 );
-					if ( $jetpack_guid ) {
-						delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
-						$result = array( 'guid' => $jetpack_guid, 'media_id' => 0 );
-						break;
-					}
-					// Gave up waiting — report a user-friendly message.
-					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
-					$error_msg = $max_bytes_seen > 0
-						? 'The upload session ended near completion. VideoPress may still be processing — wait a minute, then refresh the page. If the video still shows as an error, click Retry.'
-						: $result->get_error_message();
-					self::set_status( $attachment_id, self::STATUS_ERROR, $error_msg );
-					wp_send_json_error( $error_msg );
-				}
-
-				// First-attempt failure (no prior chunk activity): clear any stale key
-				// and retry once with a fresh session (handles simple 460 expiry).
-				if ( ! $retried_fresh ) {
-					$upload_key    = '';
-					$retried_fresh = true;
-					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
-					VideoPress_API::clear_upload_cache( $attachment_id );
-					sleep( 2 );
-					continue;
-				}
-
-				// Second failure: VideoPress may be deduplicating by Upload-Checksum
-				// (SHA256 of file content) and returning the same stale session for
-				// this file regardless of key. Retry without the checksum header so
-				// VideoPress is forced to create a genuinely new session.
-				if ( ! $retried_no_checksum ) {
-					$upload_key          = '';
-					$retried_no_checksum = true;
-					$strip_checksum      = true;
-					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
-					VideoPress_API::clear_upload_cache( $attachment_id );
-					sleep( 2 );
-					continue;
-				}
-
-				delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
-				self::set_status( $attachment_id, self::STATUS_ERROR, $result->get_error_message() );
-				wp_send_json_error( $result->get_error_message() );
-			}
-
-			if ( ! empty( $result['uploading'] ) ) {
-				$had_active_chunk = true;
-				$upload_key       = (string) ( $result['upload_key'] ?? $upload_key );
-				if ( $upload_key ) {
-					update_post_meta( $attachment_id, self::UPLOAD_KEY_META, $upload_key );
-				}
-				$bytes_now = (int) ( $result['bytes_uploaded'] ?? 0 );
-				if ( $bytes_now > $max_bytes_seen ) {
-					$max_bytes_seen = $bytes_now;
-				}
-				update_post_meta( $attachment_id, self::PROGRESS_META, array(
-					'bytes_uploaded' => $bytes_now,
-					'file_size'      => (int) $result['file_size'],
-				) );
-				continue;
-			}
-
-			break; // Upload complete.
+		$retried_fresh       = (bool) get_post_meta( $attachment_id, self::RETRY_FRESH_META, true );
+		$retried_no_checksum = (bool) get_post_meta( $attachment_id, self::RETRY_CHECKSUM_META, true );
+		$had_active_chunk    = (bool) get_post_meta( $attachment_id, self::HAD_CHUNK_META, true );
+		$strip_checksum      = (bool) get_post_meta( $attachment_id, self::STRIP_CHECKSUM_META, true );
+		if ( $strip_checksum ) {
+			delete_post_meta( $attachment_id, self::STRIP_CHECKSUM_META );
 		}
 
-		if ( $result && ! empty( $result['uploading'] ) ) {
+		// Set uploading status on the very first call of a new sequence.
+		if ( ! $upload_key && ! $had_active_chunk && ! $retried_fresh && ! $retried_no_checksum ) {
+			self::set_status( $attachment_id, self::STATUS_UPLOADING );
+		}
+
+		// Capture real tus progress: VideoPress responds to each PATCH with Upload-Offset.
+		// Writing to post_meta lets the concurrent vov_get_status poll read it in real time.
+		$progress_hook = static function ( $response, $parsed_args, $url ) use ( $attachment_id, $file ) {
+			if (
+				204 === wp_remote_retrieve_response_code( $response )
+				&& strpos( $url, 'public-api.wordpress.com' ) !== false
+			) {
+				$offset = wp_remote_retrieve_header( $response, 'upload-offset' );
+				if ( $offset !== '' ) {
+					update_post_meta( $attachment_id, self::PROGRESS_META, array(
+						'bytes_uploaded' => (int) $offset,
+						'file_size'      => (int) filesize( $file ),
+					) );
+				}
+			}
+			return $response;
+		};
+		add_filter( 'http_response', $progress_hook, 10, 3 );
+
+		$result = VideoPress_API::upload_video( $attachment_id, $upload_key, $strip_checksum );
+
+		remove_filter( 'http_response', $progress_hook, 10 );
+
+		if ( is_wp_error( $result ) ) {
+			// Jetpack may have written the GUID despite the error (e.g. 409 / 400 during finalization).
 			$jetpack_guid = get_post_meta( $attachment_id, 'videopress_guid', true );
 			if ( $jetpack_guid ) {
-				$result = array( 'guid' => $jetpack_guid, 'media_id' => 0 );
-			} else {
-				self::set_status( $attachment_id, self::STATUS_ERROR, 'Upload timed out. The video may still be processing — try refreshing the page.' );
-				wp_send_json_error( 'Upload timed out. The video may still be processing — try refreshing the page.' );
+				self::cleanup_retry_meta( $attachment_id );
+				self::complete_upload( $attachment_id, array( 'guid' => $jetpack_guid, 'media_id' => 0 ) );
+				wp_send_json_success( array( 'guid' => $jetpack_guid, 'status' => self::get_status( $attachment_id ) ) );
 			}
+
+			if ( $had_active_chunk ) {
+				$err_data       = $result->get_error_data();
+				$bytes_on_error = isset( $err_data['bytes_uploaded'] ) ? (int) $err_data['bytes_uploaded'] : 0;
+				$progress_meta  = get_post_meta( $attachment_id, self::PROGRESS_META, true );
+				$max_bytes_seen = isset( $progress_meta['bytes_uploaded'] ) ? (int) $progress_meta['bytes_uploaded'] : 0;
+
+				// Session went dead at the start with no bytes transferred — safe to retry fresh.
+				if ( $bytes_on_error < 0 && $max_bytes_seen === 0 && ! $retried_fresh ) {
+					update_post_meta( $attachment_id, self::RETRY_FRESH_META, '1' );
+					delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+					delete_post_meta( $attachment_id, self::HAD_CHUNK_META );
+					VideoPress_API::clear_upload_cache( $attachment_id );
+					wp_send_json_success( array( 'uploading' => true, 'bytes_uploaded' => 0, 'file_size' => (int) filesize( $file ) ) );
+				}
+
+				// Upload was mid-progress — VideoPress is likely still processing.
+				$jetpack_guid = self::wait_for_jetpack_guid( $attachment_id, 10, 3 );
+				if ( $jetpack_guid ) {
+					self::cleanup_retry_meta( $attachment_id );
+					self::complete_upload( $attachment_id, array( 'guid' => $jetpack_guid, 'media_id' => 0 ) );
+					wp_send_json_success( array( 'guid' => $jetpack_guid, 'status' => self::get_status( $attachment_id ) ) );
+				}
+
+				// Re-check GUID — VideoPress may have finished just after our poll window.
+				delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+				$late_guid = get_post_meta( $attachment_id, 'videopress_guid', true );
+				if ( $late_guid ) {
+					self::cleanup_retry_meta( $attachment_id );
+					self::complete_upload( $attachment_id, array( 'guid' => $late_guid, 'media_id' => 0 ) );
+					wp_send_json_success( array( 'guid' => $late_guid, 'status' => self::get_status( $attachment_id ) ) );
+				}
+
+				// Try a proxy attachment with a fresh Upload-Key.
+				$proxy_result = self::offload_via_proxy( $attachment_id );
+				if ( ! is_wp_error( $proxy_result ) && ! empty( $proxy_result['guid'] ) ) {
+					self::cleanup_retry_meta( $attachment_id );
+					self::complete_upload( $attachment_id, $proxy_result );
+					wp_send_json_success( array( 'guid' => $proxy_result['guid'], 'status' => self::get_status( $attachment_id ) ) );
+				}
+
+				$error_msg = $max_bytes_seen > 0
+					? 'The upload session ended near completion. VideoPress may still be processing — wait a minute, then refresh the page. If the video still shows as an error, click Retry.'
+					: $result->get_error_message();
+				self::cleanup_retry_meta( $attachment_id );
+				self::set_status( $attachment_id, self::STATUS_ERROR, $error_msg );
+				wp_send_json_error( $error_msg );
+			}
+
+			// No chunk activity yet — handle fresh-session failures.
+			if ( ! $retried_fresh ) {
+				update_post_meta( $attachment_id, self::RETRY_FRESH_META, '1' );
+				delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+				VideoPress_API::clear_upload_cache( $attachment_id );
+				wp_send_json_success( array( 'uploading' => true, 'bytes_uploaded' => 0, 'file_size' => (int) filesize( $file ) ) );
+			}
+
+			// VideoPress may be deduplicating by Upload-Checksum — retry without it.
+			if ( ! $retried_no_checksum ) {
+				update_post_meta( $attachment_id, self::RETRY_CHECKSUM_META, '1' );
+				update_post_meta( $attachment_id, self::STRIP_CHECKSUM_META, '1' );
+				delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+				VideoPress_API::clear_upload_cache( $attachment_id );
+				wp_send_json_success( array( 'uploading' => true, 'bytes_uploaded' => 0, 'file_size' => (int) filesize( $file ) ) );
+			}
+
+			// Both retries exhausted — try a proxy attachment with a fresh Upload-Key.
+			delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
+			$proxy_result = self::offload_via_proxy( $attachment_id );
+			if ( ! is_wp_error( $proxy_result ) && ! empty( $proxy_result['guid'] ) ) {
+				self::cleanup_retry_meta( $attachment_id );
+				self::complete_upload( $attachment_id, $proxy_result );
+				wp_send_json_success( array( 'guid' => $proxy_result['guid'], 'status' => self::get_status( $attachment_id ) ) );
+			}
+			self::cleanup_retry_meta( $attachment_id );
+			self::set_status( $attachment_id, self::STATUS_ERROR, $result->get_error_message() );
+			wp_send_json_error( $result->get_error_message() );
 		}
 
-		delete_post_meta( $attachment_id, self::UPLOAD_KEY_META );
-		delete_post_meta( $attachment_id, self::PROGRESS_META );
-		update_post_meta( $attachment_id, self::GUID_META, sanitize_text_field( $result['guid'] ) );
-		if ( ! empty( $result['media_id'] ) ) {
-			update_post_meta( $attachment_id, self::MEDIA_ID_META, (int) $result['media_id'] );
+		if ( ! empty( $result['uploading'] ) ) {
+			if ( ! $had_active_chunk ) {
+				update_post_meta( $attachment_id, self::HAD_CHUNK_META, '1' );
+			}
+			$new_key = (string) ( $result['upload_key'] ?? $upload_key );
+			if ( $new_key ) {
+				update_post_meta( $attachment_id, self::UPLOAD_KEY_META, $new_key );
+			}
+			$bytes_now = (int) ( $result['bytes_uploaded'] ?? 0 );
+			$file_size = (int) ( $result['file_size'] ?? 0 );
+			if ( $file_size === 0 ) {
+				$file_size = (int) filesize( $file );
+			}
+			// Jetpack may not return bytes_uploaded — estimate by accumulating chunks.
+			if ( $bytes_now === 0 && $file_size > 0 ) {
+				$prev       = get_post_meta( $attachment_id, self::PROGRESS_META, true );
+				$prev_bytes = isset( $prev['bytes_uploaded'] ) ? (int) $prev['bytes_uploaded'] : 0;
+				$bytes_now  = min( $prev_bytes + 5 * 1024 * 1024, $file_size - 1 );
+			}
+			update_post_meta( $attachment_id, self::PROGRESS_META, array(
+				'bytes_uploaded' => $bytes_now,
+				'file_size'      => $file_size,
+			) );
+			wp_send_json_success( array(
+				'uploading'      => true,
+				'bytes_uploaded' => $bytes_now,
+				'file_size'      => $file_size,
+			) );
 		}
-		self::store_source_url( $attachment_id, $result['guid'] );
-		self::set_status( $attachment_id, self::STATUS_UPLOADED );
-		delete_post_meta( $attachment_id, self::ERROR_META );
 
+		// Upload complete.
+		self::cleanup_retry_meta( $attachment_id );
+		self::complete_upload( $attachment_id, $result );
 		wp_send_json_success( array(
 			'guid'   => $result['guid'],
 			'status' => self::get_status( $attachment_id ),
@@ -803,5 +997,6 @@ class Offloader {
 		delete_post_meta( $local_id, self::UPLOAD_KEY_META );
 		delete_post_meta( $local_id, self::PROGRESS_META );
 		delete_post_meta( $local_id, self::SOURCE_URL_META );
+		self::cleanup_retry_meta( $local_id );
 	}
 }

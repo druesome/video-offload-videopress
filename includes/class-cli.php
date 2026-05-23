@@ -44,24 +44,37 @@ class CLI {
 	 *
 	 * ## OPTIONS
 	 *
+	 * [--id=<attachment_id>]
+	 * : Offload a single attachment by ID.
+	 *
 	 * [--dry-run]
 	 * : List videos that would be offloaded without uploading anything.
 	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp vov offload
+	 *     wp vov offload --id=123
 	 *     wp vov offload --dry-run
 	 *
 	 * @when after_wp_load
 	 */
 	public function offload( array $args, array $assoc_args ): void {
-		$dry_run = \WP_CLI\Utils\get_flag_value( $assoc_args, 'dry-run', false );
+		$dry_run       = \WP_CLI\Utils\get_flag_value( $assoc_args, 'dry-run', false );
+		$single_id     = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'id', 0 );
 
 		if ( ! $dry_run ) {
 			$this->preflight_check();
 		}
 
-		$videos = Offloader::get_local_videos( 0, -1 );
+		if ( $single_id ) {
+			$post = get_post( $single_id );
+			if ( ! $post || 'attachment' !== $post->post_type ) {
+				\WP_CLI::error( "Attachment ID {$single_id} not found." );
+			}
+			$videos = array( $post );
+		} else {
+			$videos = Offloader::get_local_videos( 0, -1 );
+		}
 
 		if ( empty( $videos ) ) {
 			\WP_CLI::success( 'No videos to offload.' );
@@ -89,7 +102,7 @@ class CLI {
 			$file_size = ( $file && file_exists( $file ) ) ? (int) filesize( $file ) : 0;
 			$label     = sprintf( '[%d/%d] %s', $i, $total, $video->post_title ?: basename( (string) $file ) );
 
-			$bar        = $file_size > 0 ? \WP_CLI\Utils\make_progress_bar( $label, $file_size ) : null;
+			$bar        = null;
 			$last_bytes = 0;
 
 			$result = Offloader::run_offload( $video->ID, function ( int $bytes_uploaded, int $fs ) use ( &$bar, &$last_bytes, $label, $file_size ) {

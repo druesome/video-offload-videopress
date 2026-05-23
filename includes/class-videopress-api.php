@@ -107,7 +107,7 @@ class VideoPress_API {
 	 *
 	 * @return array{guid: string, media_id: int}|array{uploading: true, upload_key: string, bytes_uploaded: int, file_size: int}|\WP_Error
 	 */
-	public static function upload_video( int $attachment_id, string $upload_key = '', bool $strip_checksum = false ) {
+	public static function upload_video( int $attachment_id, string $upload_key = '', bool $strip_checksum = false, bool $randomize_key = false ) {
 		if ( ! self::is_connected() ) {
 			return new \WP_Error( 'no_connection', __( 'Jetpack is not connected to WordPress.com.', 'video-offload-videopress' ) );
 		}
@@ -168,10 +168,32 @@ class VideoPress_API {
 			add_filter( 'http_request_args', $strip_fn, 998, 2 );
 		}
 
+		// Optionally randomize the Upload-Key header on the tus CREATE request so that
+		// VideoPress cannot match this upload to a permanently-stuck session for the
+		// same attachment ID. Jetpack always derives the same key (s-{site}-v-{id}), so
+		// appending a timestamp forces VideoPress to treat it as a brand-new session.
+		$randomize_fn = null;
+		if ( $randomize_key ) {
+			$randomize_fn = static function ( $args, $url ) {
+				if (
+					strpos( $url, 'public-api.wordpress.com/rest/v1.1/video-uploads/' ) !== false
+					&& ! empty( $args['headers']['Upload-Length'] )
+					&& ! empty( $args['headers']['Upload-Key'] )
+				) {
+					$args['headers']['Upload-Key'] = $args['headers']['Upload-Key'] . '-' . time();
+				}
+				return $args;
+			};
+			add_filter( 'http_request_args', $randomize_fn, 997, 2 );
+		}
+
 		$response = rest_do_request( $request );
 		remove_filter( 'http_request_args', $bump_timeout, 999 );
 		if ( $strip_fn ) {
 			remove_filter( 'http_request_args', $strip_fn, 998 );
+		}
+		if ( $randomize_fn ) {
+			remove_filter( 'http_request_args', $randomize_fn, 997 );
 		}
 
 		if ( $response->is_error() ) {
@@ -211,25 +233,44 @@ class VideoPress_API {
 			?? $data['VideoID']
 			?? 0 );
 
-		// No GUID yet — upload is still in progress or VideoPress returned an error.
 		if ( ! $guid ) {
-			if ( isset( $data['status'] ) && 'uploading' === $data['status'] ) {
+			// VideoPress returned an explicit error (e.g. 409 conflict, 460 session expired).
+			if ( isset( $data['status'] ) && 'error' === $data['status'] ) {
+				$vp_msg      = trim( (string) ( $data['error'] ?? '' ) );
+				$upload_key  = (string) ( $data['upload_key'] ?? '' );
+				$bytes_on_err = (int) ( $data['bytes_uploaded'] ?? 0 );
+				error_log( 'VOV VideoPress error response: ' . wp_json_encode( $data ) );
+
+				// 460 = stale session. Try to DELETE it directly using the upload_key from
+				// the response so VideoPress releases the slot before the caller retries.
+				if ( $bytes_on_err < 0 && $upload_key ) {
+					wp_remote_request(
+						'https://public-api.wordpress.com/rest/v1.1/video-uploads/' . rawurlencode( $upload_key ),
+						array(
+							'method'  => 'DELETE',
+							'headers' => array( 'Tus-Resumable' => '1.0.0' ),
+							'timeout' => 10,
+						)
+					);
+				}
+
+				return new \WP_Error(
+					'videopress_error',
+					( $vp_msg ?: 'VideoPress upload failed' ) . ' | Full response: ' . wp_json_encode( $data ),
+					array( 'bytes_uploaded' => $bytes_on_err )
+				);
+			}
+
+			// Upload still in progress — match by known status or presence of session fields.
+			if (
+				( isset( $data['status'] ) && in_array( $data['status'], array( 'new', 'uploading', 'resume' ), true ) )
+				|| ( isset( $data['upload_key'] ) && isset( $data['file_size'] ) )
+			) {
 				return array(
 					'uploading'      => true,
 					'upload_key'     => (string) ( $data['upload_key'] ?? '' ),
 					'bytes_uploaded' => (int) ( $data['bytes_uploaded'] ?? 0 ),
 					'file_size'      => (int) ( $data['file_size'] ?? 0 ),
-				);
-			}
-
-			// VideoPress returned an explicit error (e.g. 409 conflict, 460 session expired).
-			if ( isset( $data['status'] ) && 'error' === $data['status'] ) {
-				$vp_msg = trim( (string) ( $data['error'] ?? '' ) );
-				error_log( 'VOV VideoPress error response: ' . wp_json_encode( $data ) );
-				return new \WP_Error(
-					'videopress_error',
-					( $vp_msg ?: 'VideoPress upload failed' ) . ' | Full response: ' . wp_json_encode( $data ),
-					array( 'bytes_uploaded' => (int) ( $data['bytes_uploaded'] ?? 0 ) )
 				);
 			}
 

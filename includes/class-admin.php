@@ -274,7 +274,7 @@ class Admin {
 	// Shared status cell HTML
 	// -------------------------------------------------------------------------
 
-	public static function render_status_cell( int $attachment_id, array $s ): void {
+	public static function render_status_cell( int $attachment_id, array $s, bool $bulk = false ): void {
 		$id      = esc_attr( $attachment_id );
 		$status  = $s['status'];
 		$guid    = $s['guid'];
@@ -358,6 +358,13 @@ class Admin {
 				}
 
 				echo '</div>';
+
+				$vp_media_id = (int) get_post_meta( $attachment_id, Offloader::MEDIA_ID_META, true );
+				if ( $vp_media_id && get_post( $vp_media_id ) ) {
+					$pair_url = admin_url( 'upload.php?post_type=attachment&vov_pair=' . $vp_media_id . ',' . $attachment_id );
+					echo '<a href="' . esc_url( $pair_url ) . '" class="vov-pair-link">' . esc_html__( '↩ Offloaded file', 'video-offload-videopress' ) . '</a>';
+				}
+
 				break;
 
 			case Offloader::STATUS_ERROR:
@@ -375,12 +382,14 @@ class Admin {
 
 			default: // none / empty
 				echo '<span class="vov-badge vov-badge--local">' . esc_html__( 'Local only', 'video-offload-videopress' ) . '</span>';
-				printf(
-					'<button type="button" class="button button-small vov-btn-offload" data-id="%s" data-file-size="%s">%s</button>',
-					$id,
-					esc_attr( $file_bytes ),
-					esc_html__( 'Offload to VideoPress', 'video-offload-videopress' )
-				);
+				if ( ! $bulk ) {
+					printf(
+						'<button type="button" class="button button-small vov-btn-offload" data-id="%s" data-file-size="%s">%s</button>',
+						$id,
+						esc_attr( $file_bytes ),
+						esc_html__( 'Offload to VideoPress', 'video-offload-videopress' )
+					);
+				}
 				break;
 		}
 
@@ -529,10 +538,6 @@ class Admin {
 						<progress id="vov-progress-bar" value="0"></progress>
 						<span id="vov-progress-text"></span>
 					</div>
-					<div id="vov-current-file-progress" hidden>
-						<progress id="vov-current-file-bar" value="0" max="100"></progress>
-						<span id="vov-current-file-text"></span>
-					</div>
 				<?php else : ?>
 					<p><?php esc_html_e( 'All videos in your media library have been offloaded to VideoPress.', 'video-offload-videopress' ); ?></p>
 				<?php endif; ?>
@@ -546,7 +551,6 @@ class Admin {
 						<th class="column-title column-primary"><?php esc_html_e( 'Video', 'video-offload-videopress' ); ?></th>
 						<th><?php esc_html_e( 'Type', 'video-offload-videopress' ); ?></th>
 						<th><?php esc_html_e( 'File Size', 'video-offload-videopress' ); ?></th>
-						<th><?php esc_html_e( 'Used in', 'video-offload-videopress' ); ?></th>
 						<th><?php esc_html_e( 'Status', 'video-offload-videopress' ); ?></th>
 					</tr>
 				</thead>
@@ -571,14 +575,7 @@ class Admin {
 						</td>
 						<td><?php echo esc_html( $mime ); ?></td>
 						<td><?php echo esc_html( $file_size ); ?></td>
-						<td>
-							<button type="button" class="button-link vov-btn-find-used" data-id="<?php echo esc_attr( $video->ID ); ?>">
-								<?php esc_html_e( 'Find in content', 'video-offload-videopress' ); ?>
-							</button>
-							<ul class="vov-used-in-list" hidden></ul>
-							<p class="vov-used-in-note" hidden></p>
-						</td>
-						<td><?php self::render_status_cell( $video->ID, $status_data ); ?></td>
+						<td><?php self::render_status_cell( $video->ID, $status_data, true ); ?></td>
 					</tr>
 					<?php endforeach; ?>
 				</tbody>

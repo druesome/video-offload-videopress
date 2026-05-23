@@ -116,10 +116,21 @@
 	margin-top: 4px;
 }
 
-.vov-file-progress {
-	width: 100px;
-	height: 10px;
-	accent-color: var(--vov-green);
+.vov-progress-bar {
+	width: 120px;
+	height: 8px;
+	background: #ddd;
+	border-radius: 4px;
+	overflow: hidden;
+	flex-shrink: 0;
+}
+
+.vov-progress-bar__fill {
+	height: 100%;
+	width: 0%;
+	background: var(--vov-green);
+	border-radius: 4px;
+	transition: width 0.3s ease;
 }
 
 .vov-file-progress-pct {
