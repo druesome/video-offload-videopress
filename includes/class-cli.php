@@ -94,6 +94,7 @@ class CLI {
 		$total   = count( $videos );
 		$success = 0;
 		$failed  = 0;
+		$skipped = 0;
 		$i       = 0;
 
 		foreach ( $videos as $video ) {
@@ -123,14 +124,23 @@ class CLI {
 			}
 
 			if ( is_wp_error( $result ) ) {
-				\WP_CLI::warning( sprintf( '[%d] %s — %s', $video->ID, $video->post_title, $result->get_error_message() ) );
-				$failed++;
+				if ( 'locked' === $result->get_error_code() ) {
+					\WP_CLI::log( sprintf( '[%d] %s — skipped (already being offloaded in the browser)', $video->ID, $video->post_title ) );
+					$skipped++;
+				} else {
+					\WP_CLI::warning( sprintf( '[%d] %s — %s', $video->ID, $video->post_title, $result->get_error_message() ) );
+					$failed++;
+				}
 			} else {
 				$success++;
 			}
 		}
 
-		\WP_CLI::success( sprintf( 'Done. %d offloaded, %d failed.', $success, $failed ) );
+		$parts = array( $success . ' offloaded', $failed . ' failed' );
+		if ( $skipped > 0 ) {
+			$parts[] = $skipped . ' skipped (browser active)';
+		}
+		\WP_CLI::success( 'Done. ' . implode( ', ', $parts ) . '.' );
 	}
 
 	/**
