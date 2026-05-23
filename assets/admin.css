@@ -130,7 +130,11 @@
 	width: 0%;
 	background: var(--vov-green);
 	border-radius: 4px;
-	transition: width 0.3s ease;
+	transition: width 0.3s ease, background 0.3s ease;
+}
+
+.vov-progress-bar--error .vov-progress-bar__fill {
+	background: #d63638;
 }
 
 .vov-file-progress-pct {

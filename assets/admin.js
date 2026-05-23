@@ -23,11 +23,32 @@ jQuery( function ( $ ) {
 
 		$fill.css( 'width', '0%' );
 
+		function formatSpeed( bps ) {
+			if ( bps >= 1048576 ) { return ( bps / 1048576 ).toFixed( 1 ) + ' MB/s'; }
+			if ( bps >= 1024 )    { return Math.round( bps / 1024 ) + ' KB/s'; }
+			return Math.round( bps ) + ' B/s';
+		}
+
+		function formatEta( seconds ) {
+			seconds = Math.ceil( seconds );
+			if ( seconds < 60 ) { return seconds + 's'; }
+			const m = Math.floor( seconds / 60 );
+			const s = seconds % 60;
+			if ( m < 60 ) { return s > 0 ? m + 'm ' + s + 's' : m + 'm'; }
+			const h = Math.floor( m / 60 );
+			return h + 'h ' + ( m % 60 ) + 'm';
+		}
+
 		function setFill( bytes ) {
 			if ( ! fileSize ) { return; }
 			const pct = Math.min( bytes / fileSize * 100, 99 );
 			$fill.css( 'width', pct + '%' );
-			$pct.removeAttr( 'hidden' ).text( Math.round( pct ) + '%' );
+			let text = Math.round( pct ) + '%';
+			if ( speed > 0 && pct < 99 ) {
+				const remaining = ( fileSize - lastBytes ) / speed;
+				text += ' — ' + formatSpeed( speed ) + ', ~' + formatEta( remaining ) + ' left';
+			}
+			$pct.removeAttr( 'hidden' ).text( text );
 		}
 
 		function render() {
@@ -48,11 +69,12 @@ jQuery( function ( $ ) {
 
 		function onPoll( bytes, size ) {
 			if ( size > 0 && ! fileSize ) { fileSize = size; }
-			if ( ! fileSize || bytes <= 0 || bytes >= fileSize ) { return; }
+			if ( ! fileSize || bytes <= 0 ) { return; }
 			const now = Date.now();
 			const dt  = ( now - lastTime ) / 1000;
 			if ( bytes > lastBytes && dt > 0.5 ) {
-				speed = ( bytes - lastBytes ) / dt;
+				const newSpeed = ( bytes - lastBytes ) / dt;
+				speed = speed ? 0.3 * newSpeed + 0.7 * speed : newSpeed;
 			}
 			lastBytes = bytes;
 			lastTime  = now;
@@ -66,9 +88,14 @@ jQuery( function ( $ ) {
 			$pct.removeAttr( 'hidden' ).text( '100%' );
 		}
 
+		function error() {
+			clearInterval( timer );
+			$fill.closest( '.vov-progress-bar' ).addClass( 'vov-progress-bar--error' );
+		}
+
 		function cleanup() { clearInterval( timer ); }
 
-		return { onPoll, complete, cleanup };
+		return { onPoll, complete, error, cleanup };
 	}
 
 	// -------------------------------------------------------------------------
@@ -116,7 +143,7 @@ jQuery( function ( $ ) {
 							progress.onPoll( res.data.bytes_uploaded, res.data.file_size );
 						}
 					} );
-			}, 750 );
+			}, 2500 );
 
 			request( 'vov_offload_video', { attachment_id: id } )
 				.done( function ( res ) {
@@ -386,13 +413,13 @@ jQuery( function ( $ ) {
 								progress.onPoll( res.data.bytes_uploaded, res.data.file_size );
 							}
 						} );
-				}, 750 );
+				}, 2500 );
 
 				request( 'vov_offload_video', { attachment_id: id } )
 					.done( function ( res ) {
 						clearInterval( poller );
 						if ( ! res.success ) {
-							progress.cleanup();
+							progress.error();
 							$statusCell.find( '.vov-badge' ).attr( 'class', 'vov-badge vov-badge--error' ).text( 'Error' );
 							onBulkItemDone();
 							return;
