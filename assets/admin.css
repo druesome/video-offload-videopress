@@ -109,15 +109,16 @@
 
 .vov-uploading-msg {
 	display: flex;
-	align-items: center;
-	gap: 6px;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 3px;
 	font-size: 12px;
 	color: #005a87;
 	margin-top: 4px;
 }
 
 .vov-progress-bar {
-	width: 120px;
+	width: 160px;
 	height: 8px;
 	background: #ddd;
 	border-radius: 4px;
