@@ -21,7 +21,10 @@ class Offloader {
 	const RETRY_CHECKSUM_META = '_vov_retried_no_checksum';
 	const HAD_CHUNK_META      = '_vov_had_active_chunk';
 	const STRIP_CHECKSUM_META = '_vov_strip_checksum';
+	const LOCK_META           = '_vov_offload_lock';
 	const SAVED_BYTES_OPTION  = 'vov_space_saved_bytes';
+
+	const LOCK_TTL = 300;
 
 	const STATUS_NONE      = 'none';
 	const STATUS_UPLOADING = 'uploading';
@@ -405,6 +408,10 @@ class Offloader {
 			$upload_key = '';
 		}
 
+		if ( ! self::acquire_lock( $attachment_id, 'cli' ) ) {
+			return new \WP_Error( 'locked', 'This video is already being offloaded from the browser. Wait for it to finish or try again in a few minutes.' );
+		}
+
 		self::set_status( $attachment_id, self::STATUS_UPLOADING );
 
 		$file           = get_attached_file( $attachment_id );
@@ -412,7 +419,7 @@ class Offloader {
 		$max_bytes_seen = 0;
 		$stall_count    = 0;
 
-		$progress_hook = static function ( $response, $parsed_args, $url ) use ( $on_progress, $file_size, &$max_bytes_seen ) {
+		$progress_hook = static function ( $response, $parsed_args, $url ) use ( $attachment_id, $on_progress, $file_size, &$max_bytes_seen ) {
 			if (
 				204 === wp_remote_retrieve_response_code( $response )
 				&& strpos( $url, 'public-api.wordpress.com' ) !== false
@@ -420,6 +427,7 @@ class Offloader {
 				$offset = wp_remote_retrieve_header( $response, 'upload-offset' );
 				if ( $offset !== '' ) {
 					$max_bytes_seen = max( $max_bytes_seen, (int) $offset );
+					self::refresh_lock( $attachment_id, 'cli' );
 					if ( $on_progress ) {
 						$on_progress( (int) $offset, $file_size );
 					}
@@ -508,6 +516,7 @@ class Offloader {
 		// Success — got a GUID directly from the upload.
 		if ( $result && ! is_wp_error( $result ) && ! empty( $result['guid'] ) ) {
 			self::complete_upload( $attachment_id, $result );
+			self::release_lock( $attachment_id );
 			return $result;
 		}
 
@@ -518,12 +527,14 @@ class Offloader {
 		if ( $jetpack_guid ) {
 			$fallback = array( 'guid' => $jetpack_guid, 'media_id' => 0 );
 			self::complete_upload( $attachment_id, $fallback );
+			self::release_lock( $attachment_id );
 			return $fallback;
 		}
 
 		$proxy_result = self::offload_via_proxy( $attachment_id );
 		if ( ! is_wp_error( $proxy_result ) && ! empty( $proxy_result['guid'] ) ) {
 			self::complete_upload( $attachment_id, $proxy_result );
+			self::release_lock( $attachment_id );
 			return $proxy_result;
 		}
 
@@ -531,11 +542,13 @@ class Offloader {
 		if ( $late_guid ) {
 			$fallback = array( 'guid' => $late_guid, 'media_id' => 0 );
 			self::complete_upload( $attachment_id, $fallback );
+			self::release_lock( $attachment_id );
 			return $fallback;
 		}
 
 		$error_msg = is_wp_error( $result ) ? $result->get_error_message() : 'Upload did not complete.';
 		self::set_status( $attachment_id, self::STATUS_ERROR, $error_msg );
+		self::release_lock( $attachment_id );
 		return is_wp_error( $result ) ? $result : new \WP_Error( 'upload_failed', $error_msg );
 	}
 
@@ -638,11 +651,38 @@ class Offloader {
 		}
 	}
 
+	private static function acquire_lock( int $attachment_id, string $source ): bool {
+		$lock = get_post_meta( $attachment_id, self::LOCK_META, true );
+		if ( $lock && is_array( $lock ) ) {
+			$elapsed = time() - (int) $lock['time'];
+			if ( $elapsed < self::LOCK_TTL && $lock['source'] !== $source ) {
+				return false;
+			}
+		}
+		update_post_meta( $attachment_id, self::LOCK_META, array(
+			'time'   => time(),
+			'source' => $source,
+		) );
+		return true;
+	}
+
+	private static function refresh_lock( int $attachment_id, string $source ): void {
+		update_post_meta( $attachment_id, self::LOCK_META, array(
+			'time'   => time(),
+			'source' => $source,
+		) );
+	}
+
+	private static function release_lock( int $attachment_id ): void {
+		delete_post_meta( $attachment_id, self::LOCK_META );
+	}
+
 	private static function cleanup_retry_meta( int $attachment_id ): void {
 		delete_post_meta( $attachment_id, self::RETRY_FRESH_META );
 		delete_post_meta( $attachment_id, self::RETRY_CHECKSUM_META );
 		delete_post_meta( $attachment_id, self::HAD_CHUNK_META );
 		delete_post_meta( $attachment_id, self::STRIP_CHECKSUM_META );
+		self::release_lock( $attachment_id );
 	}
 
 	private static function complete_upload( int $attachment_id, array $result ): void {
@@ -728,7 +768,12 @@ class Offloader {
 
 		// Set uploading status on the very first call of a new sequence.
 		if ( ! $upload_key && ! $had_active_chunk && ! $retried_fresh && ! $retried_no_checksum ) {
+			if ( ! self::acquire_lock( $attachment_id, 'ajax' ) ) {
+				wp_send_json_error( 'This video is already being offloaded from the command line. Wait for it to finish or try again in a few minutes.' );
+			}
 			self::set_status( $attachment_id, self::STATUS_UPLOADING );
+		} else {
+			self::refresh_lock( $attachment_id, 'ajax' );
 		}
 
 		// Capture real tus progress: VideoPress responds to each PATCH with Upload-Offset.
