@@ -162,11 +162,25 @@ jQuery( function ( $ ) {
 					if ( xhr.status === 504 || xhr.status === 502 || xhr.status === 503 || xhr.status === 0 ) {
 						$loading.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( 'Continuing…' );
 						( function awaitSingle( polls ) {
-							if ( polls >= 200 ) { location.reload(); return; }
+							if ( polls >= 200 ) {
+								request( 'vov_get_status', { attachment_id: id } )
+									.done( function ( res ) {
+										if ( res.success && res.data && res.data.status === 'uploaded' ) {
+											location.reload();
+										} else {
+											showError( ( res.data && res.data.error ) || 'The upload timed out. Refresh and check the status.' );
+										}
+									} )
+									.fail( function () { location.reload(); } );
+								return;
+							}
 							setTimeout( function () {
 								request( 'vov_get_status', { attachment_id: id } )
 									.done( function ( res ) {
 										if ( ! res.success ) { awaitSingle( polls + 1 ); return; }
+										if ( res.data.bytes_uploaded > 0 ) {
+											progress.onPoll( res.data.bytes_uploaded, res.data.file_size );
+										}
 										if ( res.data.status === 'uploaded' ) {
 											location.reload();
 										} else if ( res.data.status === 'error' ) {
@@ -179,15 +193,16 @@ jQuery( function ( $ ) {
 							}, 3000 );
 						} )( 0 );
 					} else {
+						const serverMsg = ( xhr.responseJSON && xhr.responseJSON.data ) ? xhr.responseJSON.data : '';
 						request( 'vov_get_status', { attachment_id: id } )
 							.done( function ( res ) {
 								if ( res.success && res.data && res.data.status === 'uploaded' ) {
 									location.reload();
 								} else {
-									showError( '' );
+									showError( serverMsg || ( res.data && res.data.error ) || '' );
 								}
 							} )
-							.fail( function () { showError( '' ); } );
+							.fail( function () { showError( serverMsg ); } );
 					}
 				} );
 		}
@@ -391,11 +406,18 @@ jQuery( function ( $ ) {
 					request( 'vov_get_status', { attachment_id: id } )
 						.done( function ( res ) {
 							if ( ! res.success ) { awaitBackground( polls + 1 ); return; }
+							if ( res.data.bytes_uploaded > 0 ) {
+								progress.onPoll( res.data.bytes_uploaded, res.data.file_size );
+							}
 							if ( res.data.status === 'uploaded' ) {
 								progress.complete();
 								setTimeout( onBulkItemDone, 500 );
 							} else if ( res.data.status === 'error' ) {
-								progress.cleanup();
+								progress.error();
+								if ( res.data.error ) {
+									$statusCell.find( '.vov-badge' ).attr( 'class', 'vov-badge vov-badge--error' ).text( 'Error' );
+									$statusCell.append( $( '<p class="vov-error-msg">' ).text( res.data.error ) );
+								}
 								onBulkItemDone();
 							} else {
 								awaitBackground( polls + 1 );
@@ -421,6 +443,9 @@ jQuery( function ( $ ) {
 						if ( ! res.success ) {
 							progress.error();
 							$statusCell.find( '.vov-badge' ).attr( 'class', 'vov-badge vov-badge--error' ).text( 'Error' );
+							if ( res.data ) {
+								$statusCell.append( $( '<p class="vov-error-msg">' ).text( res.data ) );
+							}
 							onBulkItemDone();
 							return;
 						}
@@ -438,8 +463,8 @@ jQuery( function ( $ ) {
 							$statusCell.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( 'Continuing…' );
 							awaitBackground( 0 );
 						} else {
-							progress.cleanup();
-							pollOne( id, 0 );
+							$statusCell.find( '.vov-file-progress-pct' ).removeAttr( 'hidden' ).text( 'Checking…' );
+							pollOne( id, 0, progress );
 						}
 					} );
 			}
@@ -447,18 +472,30 @@ jQuery( function ( $ ) {
 			uploadChunk();
 		}
 
-		function pollOne( id, polls ) {
-			if ( polls >= 40 ) { onBulkItemDone(); return; }
+		function pollOne( id, polls, prog ) {
+			if ( polls >= 40 ) {
+				if ( prog ) { prog.cleanup(); }
+				onBulkItemDone();
+				return;
+			}
 			setTimeout( function () {
 				request( 'vov_get_status', { attachment_id: id } )
 					.done( function ( res ) {
-						if ( res.success && ( res.data.status === 'uploaded' || res.data.status === 'error' ) ) {
+						if ( ! res.success ) { pollOne( id, polls + 1, prog ); return; }
+						if ( prog && res.data.bytes_uploaded > 0 ) {
+							prog.onPoll( res.data.bytes_uploaded, res.data.file_size );
+						}
+						if ( res.data.status === 'uploaded' ) {
+							if ( prog ) { prog.complete(); }
+							setTimeout( onBulkItemDone, 500 );
+						} else if ( res.data.status === 'error' ) {
+							if ( prog ) { prog.error(); }
 							onBulkItemDone();
 						} else {
-							pollOne( id, polls + 1 );
+							pollOne( id, polls + 1, prog );
 						}
 					} )
-					.fail( function () { pollOne( id, polls + 1 ); } );
+					.fail( function () { pollOne( id, polls + 1, prog ); } );
 			}, 3000 );
 		}
 
