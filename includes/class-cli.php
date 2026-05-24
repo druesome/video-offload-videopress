@@ -172,7 +172,7 @@ class CLI {
 			if ( ! $post || 'attachment' !== $post->post_type ) {
 				\WP_CLI::error( "Attachment ID {$single_id} not found." );
 			}
-			if ( get_post_meta( $single_id, '_vov_offload_status', true ) !== 'uploaded' ) {
+			if ( get_post_meta( $single_id, '_vov_status', true ) !== 'uploaded' ) {
 				\WP_CLI::error( "Attachment {$single_id} has not been offloaded to VideoPress yet." );
 			}
 			$ids = array( $single_id );
