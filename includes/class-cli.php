@@ -109,6 +109,10 @@ class CLI {
 				if ( ! $bar && $fs > 0 ) {
 					$bar = \WP_CLI\Utils\make_progress_bar( $label, $fs );
 				}
+				// Reset if bytes go backwards (new HTTP request started).
+				if ( $bytes_uploaded < $last_bytes ) {
+					$last_bytes = 0;
+				}
 				if ( $bar ) {
 					$delta = $bytes_uploaded - $last_bytes;
 					if ( $delta > 0 ) {

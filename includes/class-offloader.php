@@ -413,16 +413,16 @@ class Offloader {
 		$stall_count    = 0;
 
 		// Hook into cURL to get real-time upload progress during the transfer.
-		$curl_hook = static function ( $handle, $parsed_args, $url ) use ( $on_progress, $file_size, &$max_bytes_seen ) {
+		// Only track requests where the upload body is large (the actual PATCH),
+		// not the small tus CREATE POST which would pollute $last_bytes tracking.
+		$curl_hook = static function ( $handle, $parsed_args, $url ) use ( $on_progress, $file_size ) {
 			if ( strpos( $url, 'public-api.wordpress.com' ) !== false ) {
 				curl_setopt( $handle, CURLOPT_NOPROGRESS, false );
-				curl_setopt( $handle, CURLOPT_PROGRESSFUNCTION, static function ( $resource, $dl_total, $dl_done, $ul_total, $ul_done ) use ( $on_progress, $file_size, &$max_bytes_seen ) {
-					if ( $ul_done > 0 && $on_progress ) {
-						$total = $file_size ?: ( $ul_total ?: 0 );
-						if ( (int) $ul_done > $max_bytes_seen ) {
-							$max_bytes_seen = (int) $ul_done;
-							$on_progress( (int) $ul_done, (int) $total );
-						}
+				curl_setopt( $handle, CURLOPT_PROGRESSFUNCTION, static function ( $resource, $dl_total, $dl_done, $ul_total, $ul_done ) use ( $on_progress, $file_size ) {
+					// Skip small requests (tus CREATE, HEAD checks).
+					// Only report for the actual file upload PATCH.
+					if ( $ul_total > 1048576 && $ul_done > 0 && $on_progress ) {
+						$on_progress( (int) $ul_done, $file_size ?: (int) $ul_total );
 					}
 				} );
 			}
