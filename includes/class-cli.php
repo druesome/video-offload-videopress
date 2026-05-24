@@ -103,52 +103,24 @@ class CLI {
 			$file_size = ( $file && file_exists( $file ) ) ? (int) filesize( $file ) : 0;
 			$label     = sprintf( '[%d/%d] %s', $i, $total, $video->post_title ?: basename( (string) $file ) );
 
-			$start_time  = microtime( true );
-			$last_time   = $start_time;
-			$last_bytes  = 0;
-			$speed       = 0.0;
-			$started     = false;
-			$fmt_speed   = array( __CLASS__, 'format_speed' );
-			$fmt_dur     = array( __CLASS__, 'format_duration' );
+			$bar        = null;
+			$last_bytes = 0;
 
-			$result = Offloader::run_offload( $video->ID, function ( int $bytes_uploaded, int $fs ) use ( &$last_bytes, &$last_time, &$speed, &$started, $label, $start_time, $fmt_speed, $fmt_dur ) {
-				$now   = microtime( true );
-				$dt    = $now - $last_time;
-				$delta = $bytes_uploaded - $last_bytes;
-
-				if ( $dt > 0.1 && $delta > 0 ) {
-					$instant    = $delta / $dt;
-					$speed      = $speed > 0 ? 0.3 * $instant + 0.7 * $speed : $instant;
-					$last_time  = $now;
-					$last_bytes = $bytes_uploaded;
+			$result = Offloader::run_offload( $video->ID, function ( int $bytes_uploaded, int $fs ) use ( &$bar, &$last_bytes, $label ) {
+				if ( ! $bar && $fs > 0 ) {
+					$bar = \WP_CLI\Utils\make_progress_bar( $label, $fs );
 				}
-
-				$pct       = $fs > 0 ? min( 100, (int) round( $bytes_uploaded / $fs * 100 ) ) : 0;
-				$elapsed   = $now - $start_time;
-				$remaining = ( $speed > 0 && $fs > $bytes_uploaded ) ? ( $fs - $bytes_uploaded ) / $speed : 0;
-
-				$bar_w  = 50;
-				$filled = (int) round( $bar_w * $pct / 100 );
-				$bar    = str_repeat( '=', $filled ) . str_repeat( ' ', $bar_w - $filled );
-
-				$info = array();
-				if ( $speed > 0 ) {
-					$info[] = call_user_func( $fmt_speed, $speed );
+				if ( $bar ) {
+					$delta = $bytes_uploaded - $last_bytes;
+					if ( $delta > 0 ) {
+						$bar->tick( $delta );
+						$last_bytes = $bytes_uploaded;
+					}
 				}
-				if ( $pct >= 100 ) {
-					$info[] = call_user_func( $fmt_dur, $elapsed );
-				} elseif ( $remaining > 0 ) {
-					$info[] = '~' . call_user_func( $fmt_dur, $remaining ) . ' left';
-				}
-
-				$line = sprintf( "\r%s  %3d%% [%s] %s", $label, $pct, $bar, implode( ', ', $info ) );
-				fwrite( STDOUT, str_pad( $line, 120 ) );
-				fflush( STDOUT );
-				$started = true;
 			} );
 
-			if ( $started ) {
-				fwrite( STDOUT, "\n" );
+			if ( $bar ) {
+				$bar->finish();
 			}
 
 			if ( is_wp_error( $result ) ) {
@@ -270,23 +242,6 @@ class CLI {
 	}
 
 	// -------------------------------------------------------------------------
-
-	private static function format_speed( float $bytes_per_sec ): string {
-		if ( $bytes_per_sec >= 1048576 ) {
-			return sprintf( '%.1f MB/s', $bytes_per_sec / 1048576 );
-		}
-		return sprintf( '%.0f KB/s', $bytes_per_sec / 1024 );
-	}
-
-	private static function format_duration( float $seconds ): string {
-		$s = (int) round( $seconds );
-		if ( $s < 60 ) {
-			return $s . 's';
-		}
-		$m = (int) floor( $s / 60 );
-		$s = $s % 60;
-		return sprintf( '%dm %02ds', $m, $s );
-	}
 
 	private function preflight_check(): void {
 		if ( ! class_exists( '\Jetpack' ) || ! \Jetpack::is_module_active( 'videopress' ) ) {
