@@ -429,7 +429,8 @@ class Offloader {
 		};
 		add_filter( 'http_response', $progress_hook, 10, 3 );
 
-		if ( function_exists( '\WP_CLI::log' ) ) {
+		$is_cli = defined( 'WP_CLI' ) && WP_CLI;
+		if ( $is_cli ) {
 			\WP_CLI::log( "  run_offload: file_size={$file_size}, has_callback=" . ( $on_progress ? 'yes' : 'no' ) );
 		}
 
@@ -439,12 +440,14 @@ class Offloader {
 			$strip_checksum = false;
 			$randomize_key  = false;
 
-			if ( function_exists( '\WP_CLI::log' ) ) {
+			if ( $is_cli ) {
 				if ( is_wp_error( $result ) ) {
 					\WP_CLI::log( "  loop i={$i}: WP_Error " . $result->get_error_code() . ' — ' . $result->get_error_message() );
 				} else {
 					$keys = is_array( $result ) ? implode( ',', array_keys( $result ) ) : 'non-array';
-					\WP_CLI::log( "  loop i={$i}: keys=[{$keys}]" );
+					$bu   = $result['bytes_uploaded'] ?? '?';
+					$fs2  = $result['file_size'] ?? '?';
+					\WP_CLI::log( "  loop i={$i}: keys=[{$keys}] bytes_uploaded={$bu} file_size={$fs2}" );
 				}
 			}
 
