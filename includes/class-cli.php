@@ -142,13 +142,13 @@ class CLI {
 				}
 
 				$line = sprintf( "\r%s  %3d%% [%s] %s", $label, $pct, $bar, implode( ', ', $info ) );
-				fwrite( STDERR, str_pad( $line, 120 ) );
-				fflush( STDERR );
+				fwrite( STDOUT, str_pad( $line, 120 ) );
+				fflush( STDOUT );
 				$started = true;
 			} );
 
 			if ( $started ) {
-				fwrite( STDERR, "\n" );
+				fwrite( STDOUT, "\n" );
 			}
 
 			if ( is_wp_error( $result ) ) {
