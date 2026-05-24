@@ -148,40 +148,78 @@ class CLI {
 	 *
 	 * ## OPTIONS
 	 *
+	 * [--id=<attachment_id>]
+	 * : Delete the local file for a single attachment by ID.
+	 *
 	 * [--dry-run]
 	 * : List files that would be deleted without removing anything.
 	 *
 	 * ## EXAMPLES
 	 *
+	 * @subcommand delete-local
 	 *     wp vov delete-local
+	 *     wp vov delete-local --id=153
 	 *     wp vov delete-local --dry-run
 	 *
 	 * @when after_wp_load
 	 */
 	public function delete_local( array $args, array $assoc_args ): void {
-		$dry_run = \WP_CLI\Utils\get_flag_value( $assoc_args, 'dry-run', false );
+		$dry_run   = \WP_CLI\Utils\get_flag_value( $assoc_args, 'dry-run', false );
+		$single_id = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'id', 0 );
 
-		$ids = Offloader::get_offloaded_with_local();
+		if ( $single_id ) {
+			$post = get_post( $single_id );
+			if ( ! $post || 'attachment' !== $post->post_type ) {
+				\WP_CLI::error( "Attachment ID {$single_id} not found." );
+			}
+			if ( get_post_meta( $single_id, '_vov_offload_status', true ) !== 'uploaded' ) {
+				\WP_CLI::error( "Attachment {$single_id} has not been offloaded to VideoPress yet." );
+			}
+			$ids = array( $single_id );
+		} else {
+			$ids = Offloader::get_offloaded_with_local();
+		}
 
 		if ( empty( $ids ) ) {
 			\WP_CLI::success( 'No local files to delete.' );
 			return;
 		}
 
+		// Show what will be deleted (used by both --dry-run and the confirmation prompt).
+		$total_bytes = 0;
+		$file_list   = array();
+		foreach ( $ids as $id ) {
+			$file  = get_attached_file( $id );
+			$bytes = ( $file && file_exists( $file ) ) ? (int) filesize( $file ) : 0;
+			$total_bytes += $bytes;
+			$post  = get_post( $id );
+			$title = $post ? $post->post_title : '';
+			$file_list[] = array( 'id' => $id, 'title' => $title, 'bytes' => $bytes );
+		}
+
 		if ( $dry_run ) {
-			$total_bytes = 0;
-			\WP_CLI::line( sprintf( 'Found %d file(s) to delete:', count( $ids ) ) );
-			foreach ( $ids as $id ) {
-				$file  = get_attached_file( $id );
-				$bytes = ( $file && file_exists( $file ) ) ? (int) filesize( $file ) : 0;
-				$total_bytes += $bytes;
-				$post  = get_post( $id );
-				$title = $post ? $post->post_title : '';
-				\WP_CLI::line( sprintf( '  [%d] %s (%s)', $id, $title, size_format( $bytes ) ) );
+			\WP_CLI::line( sprintf( 'Found %d file(s) to delete:', count( $file_list ) ) );
+			foreach ( $file_list as $item ) {
+				\WP_CLI::line( sprintf( '  [%d] %s (%s)', $item['id'], $item['title'], size_format( $item['bytes'] ) ) );
 			}
 			\WP_CLI::line( sprintf( 'Total: %s', size_format( $total_bytes, 2 ) ) );
 			return;
 		}
+
+		// Confirmation before destructive action.
+		if ( $single_id ) {
+			$item = $file_list[0];
+			\WP_CLI::warning( sprintf(
+				'You are about to permanently delete the local file for [%d] %s (%s). This cannot be undone.',
+				$item['id'], $item['title'], size_format( $item['bytes'] )
+			) );
+		} else {
+			\WP_CLI::warning( sprintf(
+				'You are about to permanently delete %d local file(s) totalling %s. This cannot be undone.',
+				count( $file_list ), size_format( $total_bytes, 2 )
+			) );
+		}
+		\WP_CLI::confirm( 'Are you sure you want to proceed?' );
 
 		$progress = \WP_CLI\Utils\make_progress_bar( 'Deleting local files', count( $ids ) );
 		$success  = 0;
