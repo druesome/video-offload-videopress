@@ -412,6 +412,24 @@ class Offloader {
 		$max_bytes_seen = 0;
 		$stall_count    = 0;
 
+		// Hook into cURL to get real-time upload progress during the transfer.
+		$curl_hook = static function ( $handle, $parsed_args, $url ) use ( $on_progress, $file_size, &$max_bytes_seen ) {
+			if ( strpos( $url, 'public-api.wordpress.com' ) !== false ) {
+				curl_setopt( $handle, CURLOPT_NOPROGRESS, false );
+				curl_setopt( $handle, CURLOPT_PROGRESSFUNCTION, static function ( $resource, $dl_total, $dl_done, $ul_total, $ul_done ) use ( $on_progress, $file_size, &$max_bytes_seen ) {
+					if ( $ul_done > 0 && $on_progress ) {
+						$total = $file_size ?: ( $ul_total ?: 0 );
+						if ( (int) $ul_done > $max_bytes_seen ) {
+							$max_bytes_seen = (int) $ul_done;
+							$on_progress( (int) $ul_done, (int) $total );
+						}
+					}
+				} );
+			}
+		};
+		add_action( 'http_api_curl', $curl_hook, 10, 3 );
+
+		// Also keep the http_response hook for the final offset confirmation.
 		$progress_hook = static function ( $response, $parsed_args, $url ) use ( $on_progress, $file_size, &$max_bytes_seen ) {
 			if (
 				204 === wp_remote_retrieve_response_code( $response )
@@ -429,27 +447,11 @@ class Offloader {
 		};
 		add_filter( 'http_response', $progress_hook, 10, 3 );
 
-		$is_cli = defined( 'WP_CLI' ) && WP_CLI;
-		if ( $is_cli ) {
-			\WP_CLI::log( "  run_offload: file_size={$file_size}, has_callback=" . ( $on_progress ? 'yes' : 'no' ) );
-		}
-
 		$result = null;
 		for ( $i = 0; $i < 600; $i++ ) {
 			$result = VideoPress_API::upload_video( $attachment_id, $upload_key, $strip_checksum, $randomize_key );
 			$strip_checksum = false;
 			$randomize_key  = false;
-
-			if ( $is_cli ) {
-				if ( is_wp_error( $result ) ) {
-					\WP_CLI::log( "  loop i={$i}: WP_Error " . $result->get_error_code() . ' — ' . $result->get_error_message() );
-				} else {
-					$keys = is_array( $result ) ? implode( ',', array_keys( $result ) ) : 'non-array';
-					$bu   = $result['bytes_uploaded'] ?? '?';
-					$fs2  = $result['file_size'] ?? '?';
-					\WP_CLI::log( "  loop i={$i}: keys=[{$keys}] bytes_uploaded={$bu} file_size={$fs2}" );
-				}
-			}
 
 			if ( is_wp_error( $result ) ) {
 				$jetpack_guid = get_post_meta( $attachment_id, 'videopress_guid', true );
@@ -520,6 +522,7 @@ class Offloader {
 		}
 
 		remove_filter( 'http_response', $progress_hook, 10 );
+		remove_action( 'http_api_curl', $curl_hook, 10 );
 
 		// Success — got a GUID directly from the upload.
 		if ( $result && ! is_wp_error( $result ) && ! empty( $result['guid'] ) ) {
