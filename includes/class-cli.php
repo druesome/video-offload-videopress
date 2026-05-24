@@ -105,7 +105,9 @@ class CLI {
 			$bar        = null;
 			$last_bytes = 0;
 
-			$result = Offloader::run_offload( $video->ID, function ( int $bytes_uploaded, int $fs ) use ( &$bar, &$last_bytes, $label, $file_size ) {
+			$result = Offloader::run_offload( $video->ID, function ( int $bytes_uploaded, int $fs ) use ( &$bar, &$last_bytes, $label, $file_size, &$cb_count ) {
+				$cb_count = ( $cb_count ?? 0 ) + 1;
+				\WP_CLI::log( "  progress: bytes={$bytes_uploaded} fs={$fs} cb#{$cb_count}" );
 				if ( ! $bar && $fs > 0 ) {
 					$bar = \WP_CLI\Utils\make_progress_bar( $label, $fs );
 				}
