@@ -429,11 +429,24 @@ class Offloader {
 		};
 		add_filter( 'http_response', $progress_hook, 10, 3 );
 
+		if ( function_exists( '\WP_CLI::log' ) ) {
+			\WP_CLI::log( "  run_offload: file_size={$file_size}, has_callback=" . ( $on_progress ? 'yes' : 'no' ) );
+		}
+
 		$result = null;
 		for ( $i = 0; $i < 600; $i++ ) {
 			$result = VideoPress_API::upload_video( $attachment_id, $upload_key, $strip_checksum, $randomize_key );
 			$strip_checksum = false;
 			$randomize_key  = false;
+
+			if ( function_exists( '\WP_CLI::log' ) ) {
+				if ( is_wp_error( $result ) ) {
+					\WP_CLI::log( "  loop i={$i}: WP_Error " . $result->get_error_code() . ' — ' . $result->get_error_message() );
+				} else {
+					$keys = is_array( $result ) ? implode( ',', array_keys( $result ) ) : 'non-array';
+					\WP_CLI::log( "  loop i={$i}: keys=[{$keys}]" );
+				}
+			}
 
 			if ( is_wp_error( $result ) ) {
 				$jetpack_guid = get_post_meta( $attachment_id, 'videopress_guid', true );
