@@ -106,7 +106,10 @@ class CLI {
 			$bar        = null;
 			$last_bytes = 0;
 
+			\WP_CLI::debug( sprintf( 'Starting offload for %d, local file_size=%d', $video->ID, $file_size ), 'vov' );
+
 			$result = Offloader::run_offload( $video->ID, function ( int $bytes_uploaded, int $fs ) use ( &$bar, &$last_bytes, $label, $file_size ) {
+				\WP_CLI::debug( sprintf( 'Progress callback: bytes=%d, fs=%d', $bytes_uploaded, $fs ), 'vov' );
 				if ( ! $bar && $fs > 0 ) {
 					$bar = \WP_CLI\Utils\make_progress_bar( $label, $fs );
 				}
@@ -118,6 +121,8 @@ class CLI {
 					}
 				}
 			} );
+
+			\WP_CLI::debug( sprintf( 'Offload done, bar created: %s', $bar ? 'yes' : 'no' ), 'vov' );
 
 			if ( $bar ) {
 				$bar->finish();
