@@ -103,13 +103,15 @@ class CLI {
 			$file_size = ( $file && file_exists( $file ) ) ? (int) filesize( $file ) : 0;
 			$label     = sprintf( '[%d/%d] %s', $i, $total, $video->post_title ?: basename( (string) $file ) );
 
-			$start_time = microtime( true );
-			$last_time  = $start_time;
-			$last_bytes = 0;
-			$speed      = 0.0;
-			$started    = false;
+			$start_time  = microtime( true );
+			$last_time   = $start_time;
+			$last_bytes  = 0;
+			$speed       = 0.0;
+			$started     = false;
+			$fmt_speed   = array( __CLASS__, 'format_speed' );
+			$fmt_dur     = array( __CLASS__, 'format_duration' );
 
-			$result = Offloader::run_offload( $video->ID, function ( int $bytes_uploaded, int $fs ) use ( &$last_bytes, &$last_time, &$speed, &$started, $label, $start_time ) {
+			$result = Offloader::run_offload( $video->ID, function ( int $bytes_uploaded, int $fs ) use ( &$last_bytes, &$last_time, &$speed, &$started, $label, $start_time, $fmt_speed, $fmt_dur ) {
 				$now   = microtime( true );
 				$dt    = $now - $last_time;
 				$delta = $bytes_uploaded - $last_bytes;
@@ -131,12 +133,12 @@ class CLI {
 
 				$info = array();
 				if ( $speed > 0 ) {
-					$info[] = self::format_speed( $speed );
+					$info[] = call_user_func( $fmt_speed, $speed );
 				}
 				if ( $pct >= 100 ) {
-					$info[] = self::format_duration( $elapsed );
+					$info[] = call_user_func( $fmt_dur, $elapsed );
 				} elseif ( $remaining > 0 ) {
-					$info[] = '~' . self::format_duration( $remaining ) . ' left';
+					$info[] = '~' . call_user_func( $fmt_dur, $remaining ) . ' left';
 				}
 
 				$line = sprintf( "\r%s  %3d%% [%s] %s", $label, $pct, $bar, implode( ', ', $info ) );
