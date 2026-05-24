@@ -427,9 +427,12 @@ class Offloader {
 				$offset = wp_remote_retrieve_header( $response, 'upload-offset' );
 				if ( $offset !== '' ) {
 					$max_bytes_seen = max( $max_bytes_seen, (int) $offset );
-					self::refresh_lock( $attachment_id, 'cli' );
 					if ( $on_progress ) {
 						$on_progress( (int) $offset, $file_size );
+					}
+					try {
+						Offloader::refresh_lock( $attachment_id, 'cli' );
+					} catch ( \Throwable $e ) { // @codingStandardsIgnoreLine
 					}
 				}
 			}
