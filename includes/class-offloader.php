@@ -413,15 +413,15 @@ class Offloader {
 		$stall_count    = 0;
 
 		// Hook into cURL to get real-time upload progress during the transfer.
+		// No URL filter — the hook is only active during the upload loop and the
+		// PATCH may go to a different domain than the CREATE.
 		$curl_hook = static function ( $handle, $parsed_args, $url ) use ( $on_progress, $file_size ) {
-			if ( strpos( $url, 'public-api.wordpress.com' ) !== false ) {
-				curl_setopt( $handle, CURLOPT_NOPROGRESS, false );
-				curl_setopt( $handle, CURLOPT_PROGRESSFUNCTION, static function ( $resource, $dl_total, $dl_done, $ul_total, $ul_done ) use ( $on_progress, $file_size ) {
-					if ( $ul_done > 0 && $on_progress ) {
-						$on_progress( (int) $ul_done, $file_size ?: (int) $ul_total );
-					}
-				} );
-			}
+			curl_setopt( $handle, CURLOPT_NOPROGRESS, false );
+			curl_setopt( $handle, CURLOPT_PROGRESSFUNCTION, static function ( $resource, $dl_total, $dl_done, $ul_total, $ul_done ) use ( $on_progress, $file_size ) {
+				if ( $ul_done > 0 && $on_progress ) {
+					$on_progress( (int) $ul_done, $file_size ?: (int) $ul_total );
+				}
+			} );
 		};
 		add_action( 'http_api_curl', $curl_hook, 10, 3 );
 
