@@ -143,6 +143,7 @@ class CLI {
 
 				$line = sprintf( "\r%s  %3d%% [%s] %s", $label, $pct, $bar, implode( ', ', $info ) );
 				fwrite( STDERR, str_pad( $line, 120 ) );
+				fflush( STDERR );
 				$started = true;
 			} );
 
