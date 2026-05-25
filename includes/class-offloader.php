@@ -22,6 +22,8 @@ class Offloader {
 	const HAD_CHUNK_META      = '_vov_had_active_chunk';
 	const STRIP_CHECKSUM_META = '_vov_strip_checksum';
 	const SAVED_BYTES_OPTION  = 'vov_space_saved_bytes';
+	const LOCK_META           = '_vov_offload_lock';
+	const LOCK_TTL            = 300; // 5 minutes
 
 	const STATUS_NONE      = 'none';
 	const STATUS_UPLOADING = 'uploading';
@@ -407,26 +409,37 @@ class Offloader {
 
 		self::set_status( $attachment_id, self::STATUS_UPLOADING );
 
-		$file           = get_attached_file( $attachment_id );
-		$file_size      = $file ? (int) filesize( $file ) : 0;
-		$max_bytes_seen = 0;
-		$stall_count    = 0;
+		if ( ! self::acquire_lock( $attachment_id, defined( 'WP_CLI' ) && WP_CLI ? 'cli' : 'server' ) ) {
+			return new \WP_Error( 'locked', 'This video is already being offloaded.' );
+		}
+
+		$file              = get_attached_file( $attachment_id );
+		$file_size         = $file ? (int) filesize( $file ) : 0;
+		$max_bytes_seen    = 0;
+		$stall_count       = 0;
+		$last_lock_refresh = time();
 
 		// Hook into cURL to get real-time upload progress during the transfer.
 		// No URL filter — the hook is only active during the upload loop and the
 		// PATCH may go to a different domain than the CREATE.
-		$curl_hook = static function ( $handle, $parsed_args, $url ) use ( $on_progress, $file_size ) {
+		$curl_hook = static function ( $handle, $parsed_args, $url ) use ( $on_progress, $file_size, $attachment_id, &$last_lock_refresh ) {
 			curl_setopt( $handle, CURLOPT_NOPROGRESS, false );
-			curl_setopt( $handle, CURLOPT_PROGRESSFUNCTION, static function ( $resource, $dl_total, $dl_done, $ul_total, $ul_done ) use ( $on_progress, $file_size ) {
+			curl_setopt( $handle, CURLOPT_PROGRESSFUNCTION, static function ( $resource, $dl_total, $dl_done, $ul_total, $ul_done ) use ( $on_progress, $file_size, $attachment_id, &$last_lock_refresh ) {
 				if ( $ul_done > 0 && $on_progress ) {
 					$on_progress( (int) $ul_done, $file_size ?: (int) $ul_total );
+				}
+				// Throttled lock refresh — once per 60 s to avoid excessive DB writes.
+				$now = time();
+				if ( $ul_done > 0 && ( $now - $last_lock_refresh ) >= 60 ) {
+					$last_lock_refresh = $now;
+					try { Offloader::refresh_lock( $attachment_id ); } catch ( \Throwable $e ) {} // phpcs:ignore Generic.CodeAnalysis.EmptyStatement
 				}
 			} );
 		};
 		add_action( 'http_api_curl', $curl_hook, 10, 3 );
 
 		// Also keep the http_response hook for the final offset confirmation.
-		$progress_hook = static function ( $response, $parsed_args, $url ) use ( $on_progress, $file_size, &$max_bytes_seen ) {
+		$progress_hook = static function ( $response, $parsed_args, $url ) use ( $on_progress, $file_size, &$max_bytes_seen, $attachment_id, &$last_lock_refresh ) {
 			if (
 				204 === wp_remote_retrieve_response_code( $response )
 				&& strpos( $url, 'public-api.wordpress.com' ) !== false
@@ -436,6 +449,11 @@ class Offloader {
 					$max_bytes_seen = max( $max_bytes_seen, (int) $offset );
 					if ( $on_progress ) {
 						$on_progress( (int) $offset, $file_size );
+					}
+					$now = time();
+					if ( ( $now - $last_lock_refresh ) >= 60 ) {
+						$last_lock_refresh = $now;
+						try { Offloader::refresh_lock( $attachment_id ); } catch ( \Throwable $e ) {} // phpcs:ignore Generic.CodeAnalysis.EmptyStatement
 					}
 				}
 			}
@@ -523,6 +541,7 @@ class Offloader {
 		// Success — got a GUID directly from the upload.
 		if ( $result && ! is_wp_error( $result ) && ! empty( $result['guid'] ) ) {
 			self::complete_upload( $attachment_id, $result );
+			self::release_lock( $attachment_id );
 			return $result;
 		}
 
@@ -533,12 +552,14 @@ class Offloader {
 		if ( $jetpack_guid ) {
 			$fallback = array( 'guid' => $jetpack_guid, 'media_id' => 0 );
 			self::complete_upload( $attachment_id, $fallback );
+			self::release_lock( $attachment_id );
 			return $fallback;
 		}
 
 		$proxy_result = self::offload_via_proxy( $attachment_id );
 		if ( ! is_wp_error( $proxy_result ) && ! empty( $proxy_result['guid'] ) ) {
 			self::complete_upload( $attachment_id, $proxy_result );
+			self::release_lock( $attachment_id );
 			return $proxy_result;
 		}
 
@@ -546,11 +567,13 @@ class Offloader {
 		if ( $late_guid ) {
 			$fallback = array( 'guid' => $late_guid, 'media_id' => 0 );
 			self::complete_upload( $attachment_id, $fallback );
+			self::release_lock( $attachment_id );
 			return $fallback;
 		}
 
 		$error_msg = is_wp_error( $result ) ? $result->get_error_message() : 'Upload did not complete.';
 		self::set_status( $attachment_id, self::STATUS_ERROR, $error_msg );
+		self::release_lock( $attachment_id );
 		return is_wp_error( $result ) ? $result : new \WP_Error( 'upload_failed', $error_msg );
 	}
 
@@ -658,6 +681,7 @@ class Offloader {
 		delete_post_meta( $attachment_id, self::RETRY_CHECKSUM_META );
 		delete_post_meta( $attachment_id, self::HAD_CHUNK_META );
 		delete_post_meta( $attachment_id, self::STRIP_CHECKSUM_META );
+		delete_post_meta( $attachment_id, self::LOCK_META );
 	}
 
 	private static function complete_upload( int $attachment_id, array $result ): void {
@@ -669,6 +693,53 @@ class Offloader {
 		}
 		self::store_source_url( $attachment_id, $result['guid'] );
 		self::set_status( $attachment_id, self::STATUS_UPLOADED );
+	}
+
+	// -------------------------------------------------------------------------
+	// Offload lock — prevents CLI and browser from uploading the same video
+	// concurrently. 5-minute TTL auto-expires stale locks.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Acquire an exclusive offload lock for an attachment.
+	 *
+	 * @param string $source 'browser' or 'cli' — stored in the lock for diagnostics.
+	 * @return bool True if lock acquired, false if another offload is active.
+	 */
+	public static function acquire_lock( int $attachment_id, string $source = 'browser' ): bool {
+		$existing = get_post_meta( $attachment_id, self::LOCK_META, true );
+		if ( $existing ) {
+			$lock = json_decode( $existing, true );
+			if ( is_array( $lock ) && isset( $lock['time'] ) && ( time() - (int) $lock['time'] ) < self::LOCK_TTL ) {
+				return false;
+			}
+		}
+		update_post_meta( $attachment_id, self::LOCK_META, wp_json_encode( array(
+			'time'   => time(),
+			'source' => $source,
+		) ) );
+		return true;
+	}
+
+	/**
+	 * Refresh the lock timestamp to prevent expiration during long uploads.
+	 */
+	public static function refresh_lock( int $attachment_id ): void {
+		$existing = get_post_meta( $attachment_id, self::LOCK_META, true );
+		if ( $existing ) {
+			$lock = json_decode( $existing, true );
+			if ( is_array( $lock ) ) {
+				$lock['time'] = time();
+				update_post_meta( $attachment_id, self::LOCK_META, wp_json_encode( $lock ) );
+			}
+		}
+	}
+
+	/**
+	 * Release the offload lock.
+	 */
+	public static function release_lock( int $attachment_id ): void {
+		delete_post_meta( $attachment_id, self::LOCK_META );
 	}
 
 	// -------------------------------------------------------------------------
@@ -741,8 +812,18 @@ class Offloader {
 			delete_post_meta( $attachment_id, self::STRIP_CHECKSUM_META );
 		}
 
+		// Acquire lock on the first call; refresh on continuations.
+		$is_continuation = $upload_key || $had_active_chunk || $retried_fresh || $retried_no_checksum;
+		if ( $is_continuation ) {
+			self::refresh_lock( $attachment_id );
+		} else {
+			if ( ! self::acquire_lock( $attachment_id, 'browser' ) ) {
+				wp_send_json_error( 'This video is already being offloaded from another session. It will complete on its own.' );
+			}
+		}
+
 		// Set uploading status on the very first call of a new sequence.
-		if ( ! $upload_key && ! $had_active_chunk && ! $retried_fresh && ! $retried_no_checksum ) {
+		if ( ! $is_continuation ) {
 			self::set_status( $attachment_id, self::STATUS_UPLOADING );
 		}
 

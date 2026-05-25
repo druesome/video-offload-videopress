@@ -94,6 +94,7 @@ class CLI {
 		$total   = count( $videos );
 		$success = 0;
 		$failed  = 0;
+		$skipped = 0;
 		$i       = 0;
 
 		foreach ( $videos as $video ) {
@@ -127,14 +128,23 @@ class CLI {
 			}
 
 			if ( is_wp_error( $result ) ) {
-				\WP_CLI::warning( sprintf( '[%d] %s — %s', $video->ID, $video->post_title, $result->get_error_message() ) );
-				$failed++;
+				if ( 'locked' === $result->get_error_code() ) {
+					\WP_CLI::warning( sprintf( '[%d] %s — skipped (already being offloaded)', $video->ID, $video->post_title ) );
+					$skipped++;
+				} else {
+					\WP_CLI::warning( sprintf( '[%d] %s — %s', $video->ID, $video->post_title, $result->get_error_message() ) );
+					$failed++;
+				}
 			} else {
 				$success++;
 			}
 		}
 
-		\WP_CLI::success( sprintf( 'Done. %d offloaded, %d failed.', $success, $failed ) );
+		$summary = sprintf( 'Done. %d offloaded, %d failed.', $success, $failed );
+		if ( $skipped > 0 ) {
+			$summary .= sprintf( ' %d skipped (already in progress).', $skipped );
+		}
+		\WP_CLI::success( $summary );
 	}
 
 	/**
@@ -142,20 +152,42 @@ class CLI {
 	 *
 	 * ## OPTIONS
 	 *
+	 * [--id=<attachment_id>]
+	 * : Delete the local file for a single attachment by ID.
+	 *
 	 * [--dry-run]
 	 * : List files that would be deleted without removing anything.
+	 *
+	 * [--yes]
+	 * : Skip the confirmation prompt.
 	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp vov delete-local
+	 *     wp vov delete-local --id=123
 	 *     wp vov delete-local --dry-run
 	 *
+	 * @subcommand delete-local
 	 * @when after_wp_load
 	 */
 	public function delete_local( array $args, array $assoc_args ): void {
-		$dry_run = \WP_CLI\Utils\get_flag_value( $assoc_args, 'dry-run', false );
+		$dry_run   = \WP_CLI\Utils\get_flag_value( $assoc_args, 'dry-run', false );
+		$single_id = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'id', 0 );
+		$yes       = \WP_CLI\Utils\get_flag_value( $assoc_args, 'yes', false );
 
-		$ids = Offloader::get_offloaded_with_local();
+		if ( $single_id ) {
+			$post = get_post( $single_id );
+			if ( ! $post || 'attachment' !== $post->post_type ) {
+				\WP_CLI::error( "Attachment ID {$single_id} not found." );
+			}
+			$status = get_post_meta( $single_id, Offloader::STATUS_META, true );
+			if ( $status !== Offloader::STATUS_UPLOADED ) {
+				\WP_CLI::error( "Attachment {$single_id} has not been offloaded to VideoPress yet." );
+			}
+			$ids = array( $single_id );
+		} else {
+			$ids = Offloader::get_offloaded_with_local();
+		}
 
 		if ( empty( $ids ) ) {
 			\WP_CLI::success( 'No local files to delete.' );
@@ -175,6 +207,15 @@ class CLI {
 			}
 			\WP_CLI::line( sprintf( 'Total: %s', size_format( $total_bytes, 2 ) ) );
 			return;
+		}
+
+		// Confirmation prompt.
+		if ( ! $yes ) {
+			$count = count( $ids );
+			$msg   = $single_id
+				? sprintf( 'Delete local file for attachment %d? This cannot be undone.', $single_id )
+				: sprintf( 'Delete %d local file(s)? This cannot be undone.', $count );
+			\WP_CLI::confirm( $msg );
 		}
 
 		$progress = \WP_CLI\Utils\make_progress_bar( 'Deleting local files', count( $ids ) );

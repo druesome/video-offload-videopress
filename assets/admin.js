@@ -441,6 +441,14 @@ jQuery( function ( $ ) {
 					.done( function ( res ) {
 						clearInterval( poller );
 						if ( ! res.success ) {
+							// Locked — being offloaded by CLI or another browser session.
+							if ( typeof res.data === 'string' && res.data.indexOf( 'already being offloaded' ) !== -1 ) {
+								progress.cleanup();
+								$statusCell.find( '.vov-badge' ).attr( 'class', 'vov-badge vov-badge--uploading' ).text( 'Skipped' );
+								$statusCell.append( $( '<p class="vov-error-msg" style="color:#005a87">' ).text( 'Already being offloaded from another session — skipped.' ) );
+								onBulkItemDone();
+								return;
+							}
 							progress.error();
 							$statusCell.find( '.vov-badge' ).attr( 'class', 'vov-badge vov-badge--error' ).text( 'Error' );
 							if ( res.data ) {
